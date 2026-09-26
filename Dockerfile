@@ -21,3 +21,7 @@ RUN for r in /comfyui/custom_nodes/*/requirements.txt; do \
             uv pip install --system -r "$r"; \
         fi; \
     done
+
+    # RunPod Serverless
+ENTRYPOINT []
+CMD ["python3", "-u", "/handler.py"]
