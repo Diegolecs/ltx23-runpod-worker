@@ -5,7 +5,6 @@ COPY requirements.txt /tmp/requirements.txt
 
 # Script de descarga de modelos
 COPY download_models.sh /download_models.sh
-
 RUN chmod +x /download_models.sh
 
 # LTX-2.3
@@ -18,7 +17,7 @@ RUN git clone --depth 1 \
     https://github.com/city96/ComfyUI-GGUF.git \
     /comfyui/custom_nodes/ComfyUI-GGUF
 
-# KJNodes - requerido por workflows optimizados de LTX-2.3
+# KJNodes
 RUN git clone --depth 1 \
     https://github.com/kijai/ComfyUI-KJNodes.git \
     /comfyui/custom_nodes/ComfyUI-KJNodes
@@ -29,6 +28,16 @@ RUN pip install --no-cache-dir \
     -r /comfyui/custom_nodes/ComfyUI-GGUF/requirements.txt \
     -r /tmp/requirements.txt
 
-# Descargar modelos antes de iniciar ComfyUI.
-# Después se conserva el arranque original de RunPod.
-ENTRYPOINT ["/bin/bash", "-c", "/download_models.sh && exec /start.sh"]
+# Arrancar RunPod primero.
+# Luego esperar a que ComfyUI esté inicializado y descargar el modelo.
+ENTRYPOINT ["/bin/bash", "-c", "\
+    /start.sh & \
+    START_PID=$!; \
+    echo 'Esperando inicialización de ComfyUI...'; \
+    until [ -d /workspace/runpod-slim/ComfyUI/models ]; do \
+        sleep 2; \
+    done; \
+    echo 'ComfyUI inicializado.'; \
+    /download_models.sh; \
+    wait $START_PID \
+"]
