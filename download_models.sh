@@ -10,7 +10,7 @@ mkdir -p "$COMFY/models/text_encoders"
 mkdir -p "$COMFY/models/checkpoints"
 mkdir -p "$COMFY/models/vae"
 mkdir -p "$COMFY/models/loras"
-mkdir -p "$COMFY/models/upscale_models"
+mkdir -p "$COMFY/models/latent_upscale_models"
 
 if [ -z "$HF_TOKEN" ]; then
     echo "ERROR: HF_TOKEN no está definido."
@@ -38,9 +38,54 @@ download() {
         --token "$HF_TOKEN"
 }
 
+# =========================================================
+# MODELO PRINCIPAL
+# =========================================================
+
 download \
     "QuantStack/LTX-2.3-GGUF" \
     "LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf" \
     "$COMFY/models/unet"
 
-echo "=== Descarga del modelo principal completada ==="
+
+# =========================================================
+# VIDEO VAE
+# =========================================================
+
+download \
+    "smthem/LTX-2.3-test-gguf" \
+    "ltx-2.3-22b-distilled_video_vae.safetensors" \
+    "$COMFY/models/vae"
+
+
+# =========================================================
+# AUDIO VAE
+# =========================================================
+
+download \
+    "smthem/LTX-2.3-test-gguf" \
+    "ltx-2.3-22b-distilled_audio_vae.safetensors" \
+    "$COMFY/models/vae"
+
+
+# =========================================================
+# SPATIAL UPSCALER
+# =========================================================
+
+download \
+    "Lightricks/LTX-2.3" \
+    "ltx-2.3-spatial-upscaler-x2-1.1.safetensors" \
+    "$COMFY/models/latent_upscale_models"
+
+
+# =========================================================
+# LORA
+# =========================================================
+
+download \
+    "Lightricks/LTX-2.3" \
+    "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors" \
+    "$COMFY/models/loras"
+
+
+echo "=== Descarga de modelos LTX-2.3 completada ==="
