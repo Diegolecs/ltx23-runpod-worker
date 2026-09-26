@@ -33,7 +33,7 @@ download() {
 
     echo "Descargando: $FILE"
 
-    huggingface-cli download "$REPO" "$FILE" \
+    hf download "$REPO" "$FILE" \
         --local-dir "$DEST" \
         --token "$HF_TOKEN"
 }
