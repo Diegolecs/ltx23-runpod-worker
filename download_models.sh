@@ -3,7 +3,7 @@ set -e
 
 echo "=== Descarga de modelos LTX-2.3 ==="
 
-COMFY="/workspace/runpod-slim/ComfyUI"
+COMFY="/runpod-volume"
 
 mkdir -p "$COMFY/models/unet"
 mkdir -p "$COMFY/models/text_encoders"
