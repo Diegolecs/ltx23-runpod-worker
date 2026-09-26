@@ -22,6 +22,6 @@ RUN for r in /comfyui/custom_nodes/*/requirements.txt; do \
         fi; \
     done
 
-    # RunPod Serverless
+# RunPod Serverless
 ENTRYPOINT []
 CMD ["python3", "-u", "/handler.py"]
