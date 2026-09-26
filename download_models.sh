@@ -26,8 +26,8 @@ download() {
     FILE="$2"
     DEST="$3"
 
-    if [ -f "$DEST/$FILE" ]; then
-        echo "Ya existe: $FILE"
+    if [ -f "$DEST/$(basename "$FILE")" ]; then
+        echo "Ya existe: $(basename "$FILE")"
         return
     fi
 
@@ -40,7 +40,7 @@ download() {
 
 download \
     "QuantStack/LTX-2.3-GGUF" \
-    "ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf" \
+    "LTX-2.3-distilled-1.1/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf" \
     "$COMFY/models/unet"
 
-echo "=== Modelos descargados ==="
+echo "=== Descarga del modelo principal completada ==="
