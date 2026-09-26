@@ -28,13 +28,14 @@ RUN pip install --no-cache-dir \
     -r /comfyui/custom_nodes/ComfyUI-GGUF/requirements.txt \
     -r /tmp/requirements.txt
 
-# Arrancar RunPod primero.
-# Luego esperar a que ComfyUI esté inicializado y descargar el modelo.
+# Arrancar ComfyUI primero.
+# Esperar a que su estructura de modelos exista.
+# Luego descargar los modelos.
 ENTRYPOINT ["/bin/bash", "-c", "\
     /start.sh & \
     START_PID=$!; \
     echo 'Esperando inicialización de ComfyUI...'; \
-    until [ -d /workspace/runpod-slim/ComfyUI/models ]; do \
+    until [ -d /comfyui/models ]; do \
         sleep 2; \
     done; \
     echo 'ComfyUI inicializado.'; \
