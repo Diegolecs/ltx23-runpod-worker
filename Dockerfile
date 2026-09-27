@@ -1,4 +1,3 @@
-```dockerfile
 FROM runpod/worker-comfyui:5.10.0-base-cuda12.8.1
 
 COPY requirements.txt /tmp/requirements.txt
@@ -35,5 +34,4 @@ fi;
 echo '=== Modelos listos. Iniciando ComfyUI + RunPod Handler ===';
 exec /start.sh
 "]
-```
 
