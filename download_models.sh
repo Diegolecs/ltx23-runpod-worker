@@ -63,8 +63,8 @@ download \
 # ============================================================
 
 download \
-    "smthem/LTX-2.3-test-gguf" \
-    "ltx-2.3-22b-distilled_video_vae.safetensors" \
+    "Kijai/LTX2.3_comfy" \
+    "vae/LTX23_video_vae_bf16.safetensors" \
     "$COMFY/models/vae"
 
 # ============================================================
@@ -72,29 +72,30 @@ download \
 # ============================================================
 
 download \
-    "smthem/LTX-2.3-test-gguf" \
-    "ltx-2.3-22b-distilled_audio_vae.safetensors" \
+    "Kijai/LTX2.3_comfy" \
+    "vae/LTX23_audio_vae_bf16.safetensors" \
     "$COMFY/models/vae"
 
 # ============================================================
-# EMBEDDING CONNECTORS
+# PROYECCIÓN DE TEXTO (conecta Gemma con el DiT de LTX-2.3)
 # ============================================================
 
 download \
-    "smthem/LTX-2.3-test-gguf" \
-    "ltx-2.3-22b-distilled_embeddings_connectors.safetensors" \
+    "Kijai/LTX2.3_comfy" \
+    "text_encoders/ltx-2.3_text_projection_bf16.safetensors" \
     "$COMFY/models/text_encoders"
 
 # ============================================================
-# GEMMA TEXT ENCODER
+# GEMMA TEXT ENCODER (versión correcta para LTX-2.3, no LTX-2)
 # ============================================================
 
 download \
     "Comfy-Org/ltx-2" \
-    "gemma_3_12B_it_fp8_e4m3fn.safetensors" \
+    "split_files/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors" \
     "$COMFY/models/text_encoders"
 
 echo "=== Descarga mínima LTX-2.3 Q4 completada ==="
 
 echo "=== Modelos instalados ==="
 find "$COMFY/models" -type f | sort
+
