@@ -441,6 +441,53 @@ def handler(job):
             workflow
         )
 
+        # ================================================================
+        # DEBUG TEMPORAL: NODOS LTX / GGUF DISPONIBLES
+        # ================================================================
+
+        print(
+            "=== DEBUG: NODOS LTX/GGUF DISPONIBLES ==="
+        )
+
+        try:
+
+            response = requests.get(
+                f"http://{COMFY_HOST}/object_info",
+                timeout=30
+            )
+
+            object_info = response.json()
+
+            for node_name in sorted(object_info.keys()):
+
+                name_lower = node_name.lower()
+
+                if (
+                    "gguf" in name_lower
+                    or "ltx" in name_lower
+                    or "clip" in name_lower
+                    or "vae" in name_lower
+                ):
+
+                    print(
+                        f"NODE: {node_name}"
+                    )
+
+        except Exception as e:
+
+            print(
+                "DEBUG object_info ERROR:",
+                str(e)
+            )
+
+        print(
+            "=== FIN DEBUG ==="
+        )
+
+        # ================================================================
+        # MOSTRAR ERRORES DE MODELOS
+        # ================================================================
+
         if not models_valid:
 
             print(
@@ -449,6 +496,7 @@ def handler(job):
             )
 
             for error in model_errors:
+
                 print(error)
 
         # ================================================================
@@ -476,6 +524,7 @@ def handler(job):
         prompt_id = queue_result.get("prompt_id")
 
         if not prompt_id:
+
             ws.close()
 
             return {
@@ -524,10 +573,12 @@ def handler(job):
                         current_prompt_id == prompt_id
                         and node is None
                     ):
+
                         print(
                             "worker-comfyui - "
                             "Execution finished."
                         )
+
                         break
 
                 elif msg_type == "execution_error":
@@ -548,10 +599,13 @@ def handler(job):
                     }
 
             except websocket.WebSocketTimeoutException:
+
                 continue
 
             except Exception:
+
                 traceback.print_exc()
+
                 break
 
         ws.close()
@@ -564,7 +618,9 @@ def handler(job):
 
         for _ in range(60):
 
-            history = get_history(prompt_id)
+            history = get_history(
+                prompt_id
+            )
 
             if history and prompt_id in history:
                 break
