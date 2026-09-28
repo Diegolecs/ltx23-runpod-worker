@@ -1,3 +1,4 @@
+```python
 import runpod
 import json
 import urllib.request
@@ -281,9 +282,9 @@ def get_history(prompt_id):
     return response.json()
 
 
-def get_images_from_history(history, prompt_id):
+def get_outputs_from_history(history, prompt_id):
     """
-    Obtiene los archivos generados por ComfyUI.
+    Obtiene imágenes y videos generados por ComfyUI.
     """
 
     if not history:
@@ -296,9 +297,13 @@ def get_images_from_history(history, prompt_id):
 
     outputs = prompt_history.get("outputs", {})
 
-    images = []
+    results = []
 
     for node_id, output in outputs.items():
+
+        # ================================================================
+        # IMÁGENES
+        # ================================================================
 
         for image in output.get("images", []):
 
@@ -325,19 +330,60 @@ def get_images_from_history(history, prompt_id):
                 if response.status_code != 200:
                     continue
 
-                images.append({
+                results.append({
+                    "type": "image",
                     "filename": filename,
                     "subfolder": subfolder,
-                    "type": image_type,
                     "data": base64.b64encode(
                         response.content
                     ).decode("utf-8")
                 })
 
             except Exception:
+                traceback.print_exc()
+
+        # ================================================================
+        # VIDEOS / GIFS
+        # ================================================================
+
+        for video in output.get("gifs", []):
+
+            filename = video.get("filename")
+            subfolder = video.get("subfolder", "")
+            video_type = video.get("type", "output")
+
+            if not filename:
                 continue
 
-    return images
+            params = {
+                "filename": filename,
+                "subfolder": subfolder,
+                "type": video_type
+            }
+
+            try:
+                response = requests.get(
+                    f"http://{COMFY_HOST}/view",
+                    params=params,
+                    timeout=300
+                )
+
+                if response.status_code != 200:
+                    continue
+
+                results.append({
+                    "type": "video",
+                    "filename": filename,
+                    "subfolder": subfolder,
+                    "data": base64.b64encode(
+                        response.content
+                    ).decode("utf-8")
+                })
+
+            except Exception:
+                traceback.print_exc()
+
+    return results
 
 
 # ============================================================================
@@ -627,13 +673,25 @@ def handler(job):
             time.sleep(1)
 
         # ================================================================
-        # OBTENER IMÁGENES
+        # OBTENER IMÁGENES Y VIDEOS
         # ================================================================
 
-        images = get_images_from_history(
+        outputs = get_outputs_from_history(
             history,
             prompt_id
         )
+
+        print(
+            f"worker-comfyui - "
+            f"Outputs encontrados: {len(outputs)}"
+        )
+
+        for output in outputs:
+            print(
+                f"worker-comfyui - "
+                f"Output: {output.get('type')} "
+                f"{output.get('filename')}"
+            )
 
         # ================================================================
         # RESULTADO
@@ -642,7 +700,7 @@ def handler(job):
         return {
             "job_id": job_id,
             "prompt_id": prompt_id,
-            "images": images
+            "outputs": outputs
         }
 
     except Exception as e:
@@ -662,3 +720,4 @@ def handler(job):
 runpod.serverless.start({
     "handler": handler
 })
+```
