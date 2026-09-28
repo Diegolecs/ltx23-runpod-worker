@@ -77,7 +77,7 @@ download \
     "$COMFY/models/vae"
 
 # ============================================================
-# PROYECCIÓN DE TEXTO (conecta Gemma con el DiT de LTX-2.3)
+# PROYECCIÓN DE TEXTO
 # ============================================================
 
 download \
@@ -86,7 +86,7 @@ download \
     "$COMFY/models/text_encoders"
 
 # ============================================================
-# GEMMA TEXT ENCODER (versión correcta para LTX-2.3, no LTX-2)
+# GEMMA TEXT ENCODER
 # ============================================================
 
 download \
@@ -98,4 +98,14 @@ echo "=== Descarga mínima LTX-2.3 Q4 completada ==="
 
 echo "=== Modelos instalados ==="
 find "$COMFY/models" -type f | sort
+
+# ============================================================
+# SEÑAL PARA EL HANDLER
+# Solo se crea si todas las descargas anteriores terminaron
+# correctamente, debido a "set -e".
+# ============================================================
+
+touch /tmp/ltx_models_ready
+
+echo "=== SEÑAL: modelos listos ==="
 
