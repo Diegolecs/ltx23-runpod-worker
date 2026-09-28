@@ -1,5 +1,4 @@
 import runpod
-import rp_upload
 import json
 import urllib.request
 import time
