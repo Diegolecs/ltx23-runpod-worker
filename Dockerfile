@@ -2,6 +2,7 @@ FROM runpod/worker-comfyui:5.10.0-base-cuda12.8.1
 
 COPY requirements.txt /tmp/requirements.txt
 COPY download_models.sh /download_models.sh
+COPY handler.py /handler.py
 
 RUN chmod +x /download_models.sh
 
