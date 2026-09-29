@@ -1,4 +1,3 @@
-```python
 import runpod
 import json
 import urllib.request
@@ -877,4 +876,3 @@ def handler(job):
 runpod.serverless.start({
     "handler": handler
 })
-```
