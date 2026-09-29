@@ -4,17 +4,23 @@ COPY requirements.txt /tmp/requirements.txt
 COPY download_models.sh /download_models.sh
 COPY handler.py /handler.py
 
-RUN echo "=== HANDLER QUE QUEDO EN LA IMAGEN ===" && \
+RUN echo "=== VERIFICANDO HANDLER ===" && \
     grep -n "DEBUG TEST: ENTRE A handler(job)" /handler.py && \
-    echo "=== FIN CHECK HANDLER ==="
+    echo "=== HANDLER CORRECTO ==="
 
 RUN chmod +x /download_models.sh
 
-RUN git clone --depth 1 https://github.com/Lightricks/ComfyUI-LTXVideo.git /comfyui/custom_nodes/ComfyUI-LTXVideo
+RUN git clone --depth 1 \
+    https://github.com/Lightricks/ComfyUI-LTXVideo.git \
+    /comfyui/custom_nodes/ComfyUI-LTXVideo
 
-RUN git clone --depth 1 https://github.com/city96/ComfyUI-GGUF.git /comfyui/custom_nodes/ComfyUI-GGUF
+RUN git clone --depth 1 \
+    https://github.com/city96/ComfyUI-GGUF.git \
+    /comfyui/custom_nodes/ComfyUI-GGUF
 
-RUN git clone --depth 1 https://github.com/kijai/ComfyUI-KJNodes.git /comfyui/custom_nodes/ComfyUI-KJNodes
+RUN git clone --depth 1 \
+    https://github.com/kijai/ComfyUI-KJNodes.git \
+    /comfyui/custom_nodes/ComfyUI-KJNodes
 
 RUN pip install --no-cache-dir \
     -r /comfyui/custom_nodes/ComfyUI-LTXVideo/requirements.txt \
