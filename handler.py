@@ -211,6 +211,8 @@ def handler(job):
     print("==============================================")
     print("LTX RUNPOD HANDLER - NUEVO JOB")
     print("==============================================")
+    print("DEBUG TEST: ENTRE A handler(job)")
+
 
     try:
         job_input = job["input"]
