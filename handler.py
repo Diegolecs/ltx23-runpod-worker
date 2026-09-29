@@ -61,6 +61,34 @@ def get_object_info():
     return response.json()
 
 
+def get_relevant_nodes():
+    object_info = get_object_info()
+
+    keywords = [
+        "ltx",
+        "gguf",
+        "gemma",
+        "vae",
+        "sampler",
+        "video",
+        "audio",
+        "combine",
+        "text",
+        "latent"
+    ]
+
+    relevant = {}
+
+    for name, info in object_info.items():
+
+        name_lower = name.lower()
+
+        if any(keyword in name_lower for keyword in keywords):
+            relevant[name] = info
+
+    return relevant
+
+
 def validate_workflow_models(workflow):
     print("DEBUG 3: Consultando object_info de ComfyUI...")
 
@@ -207,18 +235,51 @@ def get_outputs_from_history(history, prompt_id):
 
 
 def handler(job):
+
     print("")
     print("==============================================")
     print("LTX RUNPOD HANDLER - NUEVO JOB")
     print("==============================================")
     print("DEBUG TEST: ENTRE A handler(job)")
 
-
     try:
+
         job_input = job["input"]
         job_id = job["id"]
 
         print(f"DEBUG: Job ID = {job_id}")
+
+        # ==========================================
+        # MODO DIAGNOSTICO: LISTAR NODOS
+        # ==========================================
+
+        if job_input.get("action") == "list_nodes":
+
+            print("DEBUG DIAGNOSTIC: Consultando nodos de ComfyUI...")
+
+            if not check_server():
+
+                return {
+                    "error": "ComfyUI no está disponible"
+                }
+
+            nodes = get_relevant_nodes()
+
+            print(
+                f"DEBUG DIAGNOSTIC: "
+                f"{len(nodes)} nodos relevantes encontrados"
+            )
+
+            return {
+                "job_id": job_id,
+                "action": "list_nodes",
+                "node_count": len(nodes),
+                "nodes": sorted(nodes.keys())
+            }
+
+        # ==========================================
+        # FLUJO NORMAL
+        # ==========================================
 
         print("DEBUG 0: Esperando modelos LTX...")
 
@@ -227,6 +288,7 @@ def handler(job):
         while not os.path.exists(READY_FILE):
 
             if time.time() - start_wait > MAX_MODEL_WAIT:
+
                 return {
                     "error": "Timeout esperando modelos LTX"
                 }
@@ -238,6 +300,7 @@ def handler(job):
         valid, error = validate_input(job_input)
 
         if not valid:
+
             print(f"DEBUG 1 ERROR: {error}")
 
             return {
@@ -246,11 +309,15 @@ def handler(job):
 
         workflow = job_input["workflow"]
 
-        print(f"DEBUG 1 OK: Workflow recibido con {len(workflow)} nodos")
+        print(
+            f"DEBUG 1 OK: "
+            f"Workflow recibido con {len(workflow)} nodos"
+        )
 
         print("DEBUG 2: Comprobando ComfyUI...")
 
         if not check_server():
+
             return {
                 "error": "ComfyUI no está disponible"
             }
@@ -258,6 +325,7 @@ def handler(job):
         print("DEBUG 2 OK: ComfyUI disponible")
 
         if not validate_workflow_models(workflow):
+
             return {
                 "error": "Falló la validación del workflow"
             }
@@ -287,14 +355,21 @@ def handler(job):
         prompt_id = queue_result.get("prompt_id")
 
         if not prompt_id:
-            print("DEBUG 6 ERROR: ComfyUI no devolvió prompt_id")
+
+            print(
+                "DEBUG 6 ERROR: "
+                "ComfyUI no devolvió prompt_id"
+            )
 
             return {
                 "error": "ComfyUI no devolvió prompt_id",
                 "queue_result": queue_result
             }
 
-        print(f"DEBUG 7 OK: Workflow enviado. Prompt ID = {prompt_id}")
+        print(
+            f"DEBUG 7 OK: "
+            f"Workflow enviado. Prompt ID = {prompt_id}"
+        )
 
         execution_ok = wait_for_execution(
             ws,
@@ -304,6 +379,7 @@ def handler(job):
         ws.close()
 
         if not execution_ok:
+
             return {
                 "error": "ComfyUI execution error",
                 "prompt_id": prompt_id
@@ -320,7 +396,10 @@ def handler(job):
             prompt_id
         )
 
-        print(f"DEBUG 10 OK: Outputs encontrados: {len(outputs)}")
+        print(
+            f"DEBUG 10 OK: "
+            f"Outputs encontrados: {len(outputs)}"
+        )
 
         return {
             "job_id": job_id,
@@ -330,12 +409,14 @@ def handler(job):
         }
 
     except Exception as e:
+
         print("")
         print("==============================================")
         print("HANDLER ERROR")
         print("==============================================")
 
         print(str(e))
+
         traceback.print_exc()
 
         return {
