@@ -490,49 +490,7 @@ def handler(job):
             workflow
         )
 
-        # ================================================================
-        # DEBUG TEMPORAL: NODOS LTX / GGUF DISPONIBLES
-        # ================================================================
-
-        print(
-            "=== DEBUG: NODOS LTX/GGUF DISPONIBLES ==="
-        )
-
-        try:
-
-            response = requests.get(
-                f"http://{COMFY_HOST}/object_info",
-                timeout=30
-            )
-
-            object_info = response.json()
-
-            for node_name in sorted(object_info.keys()):
-
-                name_lower = node_name.lower()
-
-                if (
-                    "gguf" in name_lower
-                    or "ltx" in name_lower
-                    or "clip" in name_lower
-                    or "vae" in name_lower
-                ):
-
-                    print(
-                        f"NODE: {node_name}"
-                    )
-
-        except Exception as e:
-
-            print(
-                "DEBUG object_info ERROR:",
-                str(e)
-            )
-
-        print(
-            "=== FIN DEBUG ==="
-        )
-
+       
         # ================================================================
         # MOSTRAR ERRORES DE MODELOS
         # ================================================================
