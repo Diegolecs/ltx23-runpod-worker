@@ -1,3 +1,4 @@
+```python
 import runpod
 import json
 import urllib.request
@@ -14,67 +15,51 @@ from network_volume import (
     run_network_volume_diagnostics,
 )
 
-# ============================================================================
-# CONFIGURACIÓN
-# ============================================================================
-
 COMFY_HOST = "127.0.0.1:8188"
 
 COMFY_API_AVAILABLE_INTERVAL_MS = int(
-    os.environ.get("COMFY_API_AVAILABLE_INTERVAL_MS", "50")
+    os.environ.get("COMFY_API_AVAILABLE_INTERVAL_MS", "100")
 )
 
 COMFY_API_AVAILABLE_MAX_RETRIES = int(
     os.environ.get("COMFY_API_AVAILABLE_MAX_RETRIES", "0")
 )
 
-COMFY_API_FALLBACK_MAX_RETRIES = 500
-
-# ============================================================================
-# MAPEO DE MODELOS
-# ============================================================================
+COMFY_API_FALLBACK_MAX_RETRIES = 1200
 
 MODEL_LOADER_NODES = {
     "CheckpointLoaderSimple": (
         "checkpoints",
         ("ckpt_name",)
     ),
-
     "LoraLoader": (
         "loras",
         ("lora_name",)
     ),
-
     "VAELoader": (
         "vae",
         ("vae_name",)
     ),
-
     "DualCLIPLoader": (
         "text_encoders",
         ("clip_name1", "clip_name2")
     ),
-
     "TripleCLIPLoader": (
         "text_encoders",
         ("clip_name1", "clip_name2", "clip_name3")
     ),
-
     "UNETLoader": (
         "diffusion_models",
         ("unet_name",)
     ),
-
     "UnetLoaderGGUF": (
         "diffusion_models",
         ("unet_name",)
     ),
-
     "Hy3DModelLoader": (
         "diffusion_models",
         ("model",)
     ),
-
     "UpscaleModelLoader": (
         "upscale_models",
         ("model_name",)
@@ -90,14 +75,9 @@ MODEL_TYPE_VOLUME_DIRS = {
     "upscale_models": "/runpod-volume/models/upscale_models/",
 }
 
-# ============================================================================
-# UTILIDADES
-# ============================================================================
 
 def validate_input(job_input):
-    """
-    Valida la entrada principal del job.
-    """
+    print("DEBUG 1: Validando input del job...")
 
     if not isinstance(job_input, dict):
         return None, "Input debe ser un objeto JSON."
@@ -110,30 +90,46 @@ def validate_input(job_input):
     if not isinstance(workflow, dict):
         return None, "'workflow' debe ser un objeto JSON."
 
+    print(
+        f"DEBUG 1 OK: workflow recibido con "
+        f"{len(workflow)} nodos."
+    )
+
     return job_input, None
 
 
 def check_server(url):
-    """
-    Comprueba que ComfyUI esté disponible.
-    """
+    print(
+        "DEBUG 2: Esperando a que ComfyUI responda..."
+    )
 
     retries = 0
 
     while True:
-
         try:
-
             response = requests.get(
                 url,
                 timeout=5
             )
 
             if response.status_code == 200:
+                print(
+                    "DEBUG 2 OK: ComfyUI responde "
+                    f"HTTP {response.status_code}."
+                )
                 return True
 
-        except Exception:
-            pass
+            print(
+                "DEBUG 2: ComfyUI respondió "
+                f"HTTP {response.status_code}."
+            )
+
+        except Exception as e:
+            if retries % 10 == 0:
+                print(
+                    "DEBUG 2: ComfyUI todavía no responde. "
+                    f"Intento {retries}. Error: {e}"
+                )
 
         retries += 1
 
@@ -141,9 +137,17 @@ def check_server(url):
             COMFY_API_AVAILABLE_MAX_RETRIES > 0
             and retries >= COMFY_API_AVAILABLE_MAX_RETRIES
         ):
+            print(
+                "DEBUG 2 ERROR: Se alcanzó "
+                "COMFY_API_AVAILABLE_MAX_RETRIES."
+            )
             return False
 
         if retries >= COMFY_API_FALLBACK_MAX_RETRIES:
+            print(
+                "DEBUG 2 ERROR: Se alcanzó el máximo "
+                "de intentos esperando ComfyUI."
+            )
             return False
 
         time.sleep(
@@ -152,25 +156,39 @@ def check_server(url):
 
 
 def validate_workflow_models(workflow):
-    """
-    Comprueba que los modelos referenciados por el workflow
-    existan en las opciones disponibles de ComfyUI.
-    """
+    print(
+        "DEBUG 3: Consultando /object_info de ComfyUI..."
+    )
 
     try:
-
         response = requests.get(
             f"http://{COMFY_HOST}/object_info",
             timeout=30
         )
 
+        print(
+            "DEBUG 3: /object_info respondió "
+            f"HTTP {response.status_code}."
+        )
+
         if response.status_code != 200:
+            print(
+                "DEBUG 3: No se pudo consultar "
+                "/object_info. Continuando..."
+            )
             return True, None
 
         object_info = response.json()
 
-    except Exception:
-
+    except Exception as e:
+        print(
+            "DEBUG 3: Error consultando /object_info: "
+            f"{e}"
+        )
+        print(
+            "DEBUG 3: Continuando sin validación "
+            "de modelos."
+        )
         return True, None
 
     errors = []
@@ -186,7 +204,6 @@ def validate_workflow_models(workflow):
             continue
 
         config = MODEL_LOADER_NODES[class_type]
-
         input_names = config[1]
 
         node_info = object_info.get(class_type)
@@ -194,11 +211,7 @@ def validate_workflow_models(workflow):
         if not node_info:
             continue
 
-        input_data = node_info.get(
-            "input",
-            {}
-        )
-
+        input_data = node_info.get("input", {})
         required_inputs = input_data.get(
             "required",
             {}
@@ -214,10 +227,7 @@ def validate_workflow_models(workflow):
 
             model_name = node["inputs"][input_name]
 
-            if not isinstance(
-                model_name,
-                str
-            ):
+            if not isinstance(model_name, str):
                 continue
 
             available = []
@@ -250,24 +260,40 @@ def validate_workflow_models(workflow):
                 )
 
     if errors:
-        return False, errors
+
+        print(
+            "DEBUG 3: Se encontraron advertencias "
+            "de modelos:"
+        )
+
+        for error in errors:
+            print(
+                f"DEBUG 3 WARNING: {error}"
+            )
+
+    else:
+
+        print(
+            "DEBUG 3 OK: Validación de modelos "
+            "terminada sin errores."
+        )
 
     return True, None
 
 
 def upload_images(workflow):
-    """
-    Placeholder para compatibilidad con workflows
-    que utilicen imágenes.
-    """
+    print(
+        "DEBUG 4: Procesando imágenes del workflow..."
+    )
 
     return workflow
 
 
 def queue_prompt(workflow, client_id):
-    """
-    Envía el workflow a ComfyUI.
-    """
+    print(
+        "DEBUG 6: Enviando workflow a "
+        "http://127.0.0.1:8188/prompt ..."
+    )
 
     payload = {
         "prompt": workflow,
@@ -287,19 +313,23 @@ def queue_prompt(workflow, client_id):
     )
 
     with urllib.request.urlopen(
-        request
+        request,
+        timeout=60
     ) as response:
 
-        return json.loads(
+        result = json.loads(
             response.read()
         )
 
+        print(
+            "DEBUG 6 OK: ComfyUI respondió al "
+            "endpoint /prompt."
+        )
+
+        return result
+
 
 def get_history(prompt_id):
-    """
-    Obtiene el historial de ejecución.
-    """
-
     response = requests.get(
         f"http://{COMFY_HOST}/history/{prompt_id}",
         timeout=30
@@ -315,10 +345,6 @@ def get_outputs_from_history(
     history,
     prompt_id
 ):
-    """
-    Obtiene imágenes y videos generados
-    por ComfyUI.
-    """
 
     if not history:
         return []
@@ -338,10 +364,6 @@ def get_outputs_from_history(
     results = []
 
     for node_id, output in outputs.items():
-
-        # ================================================================
-        # IMÁGENES
-        # ================================================================
 
         for image in output.get(
             "images",
@@ -392,12 +414,7 @@ def get_outputs_from_history(
                 })
 
             except Exception:
-
                 traceback.print_exc()
-
-        # ================================================================
-        # VIDEOS / GIFS
-        # ================================================================
 
         for video in output.get(
             "gifs",
@@ -448,25 +465,33 @@ def get_outputs_from_history(
                 })
 
             except Exception:
-
                 traceback.print_exc()
 
     return results
 
 
-# ============================================================================
-# HANDLER
-# ============================================================================
-
 def handler(job):
 
     try:
 
-        # ================================================================
-        # NETWORK VOLUME DIAGNOSTICS
-        # ================================================================
+        print(
+            "========================================"
+        )
+
+        print(
+            "LTX RUNPOD HANDLER - NUEVO JOB"
+        )
+
+        print(
+            "========================================"
+        )
 
         if is_network_volume_debug_enabled():
+
+            print(
+                "DEBUG: Ejecutando diagnóstico "
+                "del Network Volume..."
+            )
 
             try:
 
@@ -476,31 +501,23 @@ def handler(job):
 
                 traceback.print_exc()
 
-        # ================================================================
-        # INPUT
-        # ================================================================
-
         job_input = job["input"]
-
         job_id = job["id"]
 
-        # ================================================================
-        # ESPERAR A QUE TERMINE LA DESCARGA DE MODELOS
-        # ================================================================
+        print(
+            f"DEBUG: Job ID = {job_id}"
+        )
 
         models_ready_file = (
             "/tmp/ltx_models_ready"
         )
 
         max_wait_seconds = 1800
-
         wait_interval = 2
-
         waited = 0
 
         print(
-            "worker-comfyui - "
-            "Waiting for LTX models to be ready..."
+            "DEBUG 0: Esperando modelos LTX..."
         )
 
         while not os.path.exists(
@@ -511,9 +528,10 @@ def handler(job):
 
                 return {
                     "error": (
-                        "Timeout waiting for LTX models "
-                        "to finish downloading after "
-                        f"{max_wait_seconds} seconds."
+                        "Timeout waiting for LTX "
+                        "models to finish downloading "
+                        f"after {max_wait_seconds} "
+                        "seconds."
                     )
                 }
 
@@ -524,21 +542,19 @@ def handler(job):
             waited += wait_interval
 
         print(
-            "worker-comfyui - "
-            "LTX models are ready."
+            "DEBUG 0 OK: LTX models are ready."
         )
 
-        # ================================================================
-        # VALIDAR INPUT
-        # ================================================================
-
         validated_data, error_message = (
-            validate_input(
-                job_input
-            )
+            validate_input(job_input)
         )
 
         if error_message:
+
+            print(
+                "DEBUG 1 ERROR: "
+                f"{error_message}"
+            )
 
             return {
                 "error": error_message
@@ -548,13 +564,19 @@ def handler(job):
             "workflow"
         ]
 
-        # ================================================================
-        # COMPROBAR COMFYUI
-        # ================================================================
+        print(
+            "DEBUG: Workflow recibido. "
+            "Continuando..."
+        )
 
         if not check_server(
             f"http://{COMFY_HOST}/"
         ):
+
+            print(
+                "DEBUG 2 ERROR: "
+                "ComfyUI no está disponible."
+            )
 
             return {
                 "error": (
@@ -562,17 +584,17 @@ def handler(job):
                 )
             }
 
-        # ================================================================
-        # SUBIR IMÁGENES SI LAS HUBIERA
-        # ================================================================
+        print(
+            "DEBUG: ComfyUI está disponible."
+        )
 
         workflow = upload_images(
             workflow
         )
 
-        # ================================================================
-        # PREFLIGHT DE MODELOS
-        # ================================================================
+        print(
+            "DEBUG: upload_images terminado."
+        )
 
         models_valid, model_errors = (
             validate_workflow_models(
@@ -580,28 +602,29 @@ def handler(job):
             )
         )
 
-        # ================================================================
-        # MOSTRAR ERRORES DE MODELOS
-        # ================================================================
-
         if not models_valid:
 
             print(
-                "worker-comfyui - "
-                "Workflow model validation "
-                "warnings/errors:"
+                "DEBUG: La validación devolvió "
+                "un estado no válido."
             )
 
-            for error in model_errors:
+            if model_errors:
 
-                print(error)
+                for error in model_errors:
+                    print(error)
 
-        # ================================================================
-        # WEBSOCKET
-        # ================================================================
+        print(
+            "DEBUG 5 OK: Preparación del workflow "
+            "terminada."
+        )
 
         client_id = str(
             uuid.uuid4()
+        )
+
+        print(
+            "DEBUG 5: Creando conexión WebSocket..."
         )
 
         ws = websocket.WebSocket()
@@ -612,18 +635,22 @@ def handler(job):
             timeout=30
         )
 
-        # ================================================================
-        # ENCOLAR WORKFLOW
-        # ================================================================
+        print(
+            "DEBUG 5 OK: WebSocket conectado."
+        )
 
         print(
-            "worker-comfyui - "
-            "Sending workflow to ComfyUI..."
+            "DEBUG 6: Sending workflow to ComfyUI..."
         )
 
         queue_result = queue_prompt(
             workflow,
             client_id
+        )
+
+        print(
+            "DEBUG 6 RESULT:",
+            queue_result
         )
 
         prompt_id = queue_result.get(
@@ -643,13 +670,13 @@ def handler(job):
             }
 
         print(
-            "worker-comfyui - "
-            f"Queued prompt: {prompt_id}"
+            "DEBUG 7 OK: Prompt en cola: "
+            f"{prompt_id}"
         )
 
-        # ================================================================
-        # ESPERAR EJECUCIÓN
-        # ================================================================
+        print(
+            "DEBUG 8: Esperando ejecución..."
+        )
 
         while True:
 
@@ -694,23 +721,31 @@ def handler(job):
                     if (
                         current_prompt_id
                         == prompt_id
+                    ):
+
+                        print(
+                            "DEBUG 8: Ejecutando "
+                            f"nodo: {node}"
+                        )
+
+                    if (
+                        current_prompt_id
+                        == prompt_id
                         and node is None
                     ):
 
                         print(
-                            "worker-comfyui - "
+                            "DEBUG 8 OK: "
                             "Execution finished."
                         )
 
                         break
 
-                elif msg_type == (
-                    "execution_error"
-                ):
+                elif msg_type == "execution_error":
 
                     print(
-                        "worker-comfyui - "
-                        "Execution error:",
+                        "DEBUG 8 ERROR: "
+                        "ComfyUI execution error:",
                         msg_data
                     )
 
@@ -723,10 +758,12 @@ def handler(job):
                         )
                     }
 
-            except (
-                websocket
-                .WebSocketTimeoutException
-            ):
+            except websocket.WebSocketTimeoutException:
+
+                print(
+                    "DEBUG 8: WebSocket timeout. "
+                    "Seguimos esperando..."
+                )
 
                 continue
 
@@ -738,13 +775,18 @@ def handler(job):
 
         ws.close()
 
-        # ================================================================
-        # OBTENER HISTORIAL
-        # ================================================================
+        print(
+            "DEBUG 9: WebSocket cerrado."
+        )
+
+        print(
+            "DEBUG 9: Buscando historial "
+            "del prompt..."
+        )
 
         history = None
 
-        for _ in range(60):
+        for attempt in range(60):
 
             history = get_history(
                 prompt_id
@@ -754,39 +796,55 @@ def handler(job):
                 history
                 and prompt_id in history
             ):
+
+                print(
+                    "DEBUG 9 OK: Historial encontrado."
+                )
+
                 break
+
+            if attempt % 5 == 0:
+
+                print(
+                    "DEBUG 9: Historial todavía "
+                    "no disponible..."
+                )
 
             time.sleep(1)
 
-        # ================================================================
-        # OBTENER IMÁGENES Y VIDEOS
-        # ================================================================
+        print(
+            "DEBUG 10: Extrayendo outputs..."
+        )
 
-        outputs = (
-            get_outputs_from_history(
-                history,
-                prompt_id
-            )
+        outputs = get_outputs_from_history(
+            history,
+            prompt_id
         )
 
         print(
-            "worker-comfyui - "
-            f"Outputs encontrados: "
+            "DEBUG 10 OK: Outputs encontrados: "
             f"{len(outputs)}"
         )
 
         for output in outputs:
 
             print(
-                "worker-comfyui - "
-                f"Output: "
-                f"{output.get('type')} "
-                f"{output.get('filename')}"
+                "DEBUG OUTPUT:",
+                output.get("type"),
+                output.get("filename")
             )
 
-        # ================================================================
-        # RESULTADO
-        # ================================================================
+        print(
+            "========================================"
+        )
+
+        print(
+            "JOB TERMINADO"
+        )
+
+        print(
+            "========================================"
+        )
 
         return {
             "job_id": job_id,
@@ -796,6 +854,18 @@ def handler(job):
 
     except Exception as e:
 
+        print(
+            "========================================"
+        )
+
+        print(
+            "HANDLER ERROR"
+        )
+
+        print(
+            "========================================"
+        )
+
         traceback.print_exc()
 
         return {
@@ -804,10 +874,7 @@ def handler(job):
         }
 
 
-# ============================================================================
-# RUNPOD
-# ============================================================================
-
 runpod.serverless.start({
     "handler": handler
 })
+```
