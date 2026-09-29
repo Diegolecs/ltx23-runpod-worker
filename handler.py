@@ -5,13 +5,9 @@ import time
 import os
 import requests
 import base64
-from io import BytesIO
 import websocket
 import uuid
-import tempfile
-import socket
 import traceback
-import logging
 
 from network_volume import (
     is_network_volume_debug_enabled,
@@ -33,8 +29,6 @@ COMFY_API_AVAILABLE_MAX_RETRIES = int(
 )
 
 COMFY_API_FALLBACK_MAX_RETRIES = 500
-
-COMFY_PID_FILE = "/tmp/comfyui.pid"
 
 # ============================================================================
 # MAPEO DE MODELOS
@@ -91,7 +85,7 @@ MODEL_TYPE_VOLUME_DIRS = {
     "checkpoints": "/runpod-volume/models/checkpoints/",
     "loras": "/runpod-volume/models/loras/",
     "vae": "/runpod-volume/models/vae/",
-    "text_encoders": "/runpod-volume/models/clip/",
+    "text_encoders": "/runpod-volume/models/text_encoders/",
     "diffusion_models": "/runpod-volume/models/unet/",
     "upscale_models": "/runpod-volume/models/upscale_models/",
 }
@@ -127,8 +121,13 @@ def check_server(url):
     retries = 0
 
     while True:
+
         try:
-            response = requests.get(url, timeout=5)
+
+            response = requests.get(
+                url,
+                timeout=5
+            )
 
             if response.status_code == 200:
                 return True
@@ -147,7 +146,9 @@ def check_server(url):
         if retries >= COMFY_API_FALLBACK_MAX_RETRIES:
             return False
 
-        time.sleep(COMFY_API_AVAILABLE_INTERVAL_MS / 1000)
+        time.sleep(
+            COMFY_API_AVAILABLE_INTERVAL_MS / 1000
+        )
 
 
 def validate_workflow_models(workflow):
@@ -157,6 +158,7 @@ def validate_workflow_models(workflow):
     """
 
     try:
+
         response = requests.get(
             f"http://{COMFY_HOST}/object_info",
             timeout=30
@@ -168,6 +170,7 @@ def validate_workflow_models(workflow):
         object_info = response.json()
 
     except Exception:
+
         return True, None
 
     errors = []
@@ -184,7 +187,6 @@ def validate_workflow_models(workflow):
 
         config = MODEL_LOADER_NODES[class_type]
 
-        model_type = config[0]
         input_names = config[1]
 
         node_info = object_info.get(class_type)
@@ -192,38 +194,59 @@ def validate_workflow_models(workflow):
         if not node_info:
             continue
 
-        input_data = node_info.get("input", {})
+        input_data = node_info.get(
+            "input",
+            {}
+        )
 
-        required_inputs = input_data.get("required", {})
+        required_inputs = input_data.get(
+            "required",
+            {}
+        )
 
         for input_name in input_names:
 
-            if input_name not in node.get("inputs", {}):
+            if input_name not in node.get(
+                "inputs",
+                {}
+            ):
                 continue
 
             model_name = node["inputs"][input_name]
 
-            if not isinstance(model_name, str):
+            if not isinstance(
+                model_name,
+                str
+            ):
                 continue
 
             available = []
 
             if input_name in required_inputs:
 
-                definition = required_inputs[input_name]
+                definition = required_inputs[
+                    input_name
+                ]
 
-                if isinstance(definition, list) and definition:
+                if (
+                    isinstance(definition, list)
+                    and definition
+                ):
 
                     first = definition[0]
 
                     if isinstance(first, list):
                         available = first
 
-            if available and model_name not in available:
+            if (
+                available
+                and model_name not in available
+            ):
 
                 errors.append(
                     f"{class_type} {node_id}: "
-                    f"{model_name} no está disponible en {available}"
+                    f"{model_name} no está disponible "
+                    f"en {available}"
                 )
 
     if errors:
@@ -234,7 +257,8 @@ def validate_workflow_models(workflow):
 
 def upload_images(workflow):
     """
-    Placeholder para compatibilidad con workflows que utilicen imágenes.
+    Placeholder para compatibilidad con workflows
+    que utilicen imágenes.
     """
 
     return workflow
@@ -250,7 +274,9 @@ def queue_prompt(workflow, client_id):
         "client_id": client_id
     }
 
-    data = json.dumps(payload).encode("utf-8")
+    data = json.dumps(
+        payload
+    ).encode("utf-8")
 
     request = urllib.request.Request(
         f"http://{COMFY_HOST}/prompt",
@@ -260,8 +286,13 @@ def queue_prompt(workflow, client_id):
         }
     )
 
-    with urllib.request.urlopen(request) as response:
-        return json.loads(response.read())
+    with urllib.request.urlopen(
+        request
+    ) as response:
+
+        return json.loads(
+            response.read()
+        )
 
 
 def get_history(prompt_id):
@@ -280,20 +311,29 @@ def get_history(prompt_id):
     return response.json()
 
 
-def get_outputs_from_history(history, prompt_id):
+def get_outputs_from_history(
+    history,
+    prompt_id
+):
     """
-    Obtiene imágenes y videos generados por ComfyUI.
+    Obtiene imágenes y videos generados
+    por ComfyUI.
     """
 
     if not history:
         return []
 
-    prompt_history = history.get(prompt_id)
+    prompt_history = history.get(
+        prompt_id
+    )
 
     if not prompt_history:
         return []
 
-    outputs = prompt_history.get("outputs", {})
+    outputs = prompt_history.get(
+        "outputs",
+        {}
+    )
 
     results = []
 
@@ -303,11 +343,24 @@ def get_outputs_from_history(history, prompt_id):
         # IMÁGENES
         # ================================================================
 
-        for image in output.get("images", []):
+        for image in output.get(
+            "images",
+            []
+        ):
 
-            filename = image.get("filename")
-            subfolder = image.get("subfolder", "")
-            image_type = image.get("type", "output")
+            filename = image.get(
+                "filename"
+            )
+
+            subfolder = image.get(
+                "subfolder",
+                ""
+            )
+
+            image_type = image.get(
+                "type",
+                "output"
+            )
 
             if not filename:
                 continue
@@ -339,17 +392,31 @@ def get_outputs_from_history(history, prompt_id):
                 })
 
             except Exception:
+
                 traceback.print_exc()
 
         # ================================================================
         # VIDEOS / GIFS
         # ================================================================
 
-        for video in output.get("gifs", []):
+        for video in output.get(
+            "gifs",
+            []
+        ):
 
-            filename = video.get("filename")
-            subfolder = video.get("subfolder", "")
-            video_type = video.get("type", "output")
+            filename = video.get(
+                "filename"
+            )
+
+            subfolder = video.get(
+                "subfolder",
+                ""
+            )
+
+            video_type = video.get(
+                "type",
+                "output"
+            )
 
             if not filename:
                 continue
@@ -381,6 +448,7 @@ def get_outputs_from_history(history, prompt_id):
                 })
 
             except Exception:
+
                 traceback.print_exc()
 
     return results
@@ -401,9 +469,11 @@ def handler(job):
         if is_network_volume_debug_enabled():
 
             try:
+
                 run_network_volume_diagnostics()
 
             except Exception:
+
                 traceback.print_exc()
 
         # ================================================================
@@ -411,16 +481,21 @@ def handler(job):
         # ================================================================
 
         job_input = job["input"]
+
         job_id = job["id"]
 
         # ================================================================
         # ESPERAR A QUE TERMINE LA DESCARGA DE MODELOS
         # ================================================================
 
-        models_ready_file = "/tmp/ltx_models_ready"
+        models_ready_file = (
+            "/tmp/ltx_models_ready"
+        )
 
         max_wait_seconds = 1800
+
         wait_interval = 2
+
         waited = 0
 
         print(
@@ -428,19 +503,24 @@ def handler(job):
             "Waiting for LTX models to be ready..."
         )
 
-        while not os.path.exists(models_ready_file):
+        while not os.path.exists(
+            models_ready_file
+        ):
 
             if waited >= max_wait_seconds:
 
                 return {
                     "error": (
-                        "Timeout waiting for LTX models to finish "
-                        "downloading after "
+                        "Timeout waiting for LTX models "
+                        "to finish downloading after "
                         f"{max_wait_seconds} seconds."
                     )
                 }
 
-            time.sleep(wait_interval)
+            time.sleep(
+                wait_interval
+            )
+
             waited += wait_interval
 
         print(
@@ -452,8 +532,10 @@ def handler(job):
         # VALIDAR INPUT
         # ================================================================
 
-        validated_data, error_message = validate_input(
-            job_input
+        validated_data, error_message = (
+            validate_input(
+                job_input
+            )
         )
 
         if error_message:
@@ -462,7 +544,9 @@ def handler(job):
                 "error": error_message
             }
 
-        workflow = validated_data["workflow"]
+        workflow = validated_data[
+            "workflow"
+        ]
 
         # ================================================================
         # COMPROBAR COMFYUI
@@ -473,24 +557,29 @@ def handler(job):
         ):
 
             return {
-                "error": "ComfyUI no está disponible."
+                "error": (
+                    "ComfyUI no está disponible."
+                )
             }
 
         # ================================================================
         # SUBIR IMÁGENES SI LAS HUBIERA
         # ================================================================
 
-        workflow = upload_images(workflow)
+        workflow = upload_images(
+            workflow
+        )
 
         # ================================================================
         # PREFLIGHT DE MODELOS
         # ================================================================
 
-        models_valid, model_errors = validate_workflow_models(
-            workflow
+        models_valid, model_errors = (
+            validate_workflow_models(
+                workflow
+            )
         )
 
-       
         # ================================================================
         # MOSTRAR ERRORES DE MODELOS
         # ================================================================
@@ -499,7 +588,8 @@ def handler(job):
 
             print(
                 "worker-comfyui - "
-                "Workflow model validation warnings/errors:"
+                "Workflow model validation "
+                "warnings/errors:"
             )
 
             for error in model_errors:
@@ -510,12 +600,15 @@ def handler(job):
         # WEBSOCKET
         # ================================================================
 
-        client_id = str(uuid.uuid4())
+        client_id = str(
+            uuid.uuid4()
+        )
 
         ws = websocket.WebSocket()
 
         ws.connect(
-            f"ws://{COMFY_HOST}/ws?clientId={client_id}",
+            f"ws://{COMFY_HOST}/ws"
+            f"?clientId={client_id}",
             timeout=30
         )
 
@@ -523,12 +616,19 @@ def handler(job):
         # ENCOLAR WORKFLOW
         # ================================================================
 
+        print(
+            "worker-comfyui - "
+            "Sending workflow to ComfyUI..."
+        )
+
         queue_result = queue_prompt(
             workflow,
             client_id
         )
 
-        prompt_id = queue_result.get("prompt_id")
+        prompt_id = queue_result.get(
+            "prompt_id"
+        )
 
         if not prompt_id:
 
@@ -536,13 +636,14 @@ def handler(job):
 
             return {
                 "error": (
-                    "ComfyUI no devolvió prompt_id.",
+                    "ComfyUI no devolvió "
+                    "prompt_id.",
                     queue_result
                 )
             }
 
         print(
-            f"worker-comfyui - "
+            "worker-comfyui - "
             f"Queued prompt: {prompt_id}"
         )
 
@@ -559,25 +660,40 @@ def handler(job):
                 if not message:
                     continue
 
-                if isinstance(message, bytes):
+                if isinstance(
+                    message,
+                    bytes
+                ):
                     continue
 
-                data = json.loads(message)
+                data = json.loads(
+                    message
+                )
 
-                msg_type = data.get("type")
+                msg_type = data.get(
+                    "type"
+                )
 
-                msg_data = data.get("data", {})
+                msg_data = data.get(
+                    "data",
+                    {}
+                )
 
                 if msg_type == "executing":
 
-                    current_prompt_id = msg_data.get(
-                        "prompt_id"
+                    current_prompt_id = (
+                        msg_data.get(
+                            "prompt_id"
+                        )
                     )
 
-                    node = msg_data.get("node")
+                    node = msg_data.get(
+                        "node"
+                    )
 
                     if (
-                        current_prompt_id == prompt_id
+                        current_prompt_id
+                        == prompt_id
                         and node is None
                     ):
 
@@ -588,7 +704,9 @@ def handler(job):
 
                         break
 
-                elif msg_type == "execution_error":
+                elif msg_type == (
+                    "execution_error"
+                ):
 
                     print(
                         "worker-comfyui - "
@@ -605,7 +723,10 @@ def handler(job):
                         )
                     }
 
-            except websocket.WebSocketTimeoutException:
+            except (
+                websocket
+                .WebSocketTimeoutException
+            ):
 
                 continue
 
@@ -629,7 +750,10 @@ def handler(job):
                 prompt_id
             )
 
-            if history and prompt_id in history:
+            if (
+                history
+                and prompt_id in history
+            ):
                 break
 
             time.sleep(1)
@@ -638,21 +762,25 @@ def handler(job):
         # OBTENER IMÁGENES Y VIDEOS
         # ================================================================
 
-        outputs = get_outputs_from_history(
-            history,
-            prompt_id
+        outputs = (
+            get_outputs_from_history(
+                history,
+                prompt_id
+            )
         )
 
         print(
-            f"worker-comfyui - "
-            f"Outputs encontrados: {len(outputs)}"
+            "worker-comfyui - "
+            f"Outputs encontrados: "
+            f"{len(outputs)}"
         )
 
         for output in outputs:
 
             print(
-                f"worker-comfyui - "
-                f"Output: {output.get('type')} "
+                "worker-comfyui - "
+                f"Output: "
+                f"{output.get('type')} "
                 f"{output.get('filename')}"
             )
 
