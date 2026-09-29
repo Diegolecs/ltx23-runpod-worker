@@ -23,17 +23,14 @@ RUN pip install --no-cache-dir \
     -r /comfyui/custom_nodes/ComfyUI-GGUF/requirements.txt \
     -r /tmp/requirements.txt
 
-ENTRYPOINT ["/bin/bash", "-c", " 
-echo '=== Descargando modelos antes de iniciar ComfyUI ==='; 
-/download_models.sh; 
-DOWNLOAD_STATUS=$?; 
-if [ $DOWNLOAD_STATUS -ne 0 ]; then 
-echo 'ERROR: Falló la descarga de modelos.'; 
-exit $DOWNLOAD_STATUS; 
-fi; 
-echo '=== CONTENIDO DE START.SH ==='; 
-cat /start.sh; 
-echo '=== FIN DE START.SH ==='; 
-echo '=== Iniciando ComfyUI + RunPod Handler ==='; 
-exec /start.sh 
+ENTRYPOINT ["/bin/bash", "-c", "
+echo '=== Descargando modelos antes de iniciar ComfyUI ===';
+/download_models.sh;
+DOWNLOAD_STATUS=$?;
+if [ $DOWNLOAD_STATUS -ne 0 ]; then
+echo 'ERROR: Falló la descarga de modelos.';
+exit $DOWNLOAD_STATUS;
+fi;
+echo '=== Iniciando ComfyUI + Handler personalizado ===';
+python3 -u /handler.py
 "]
