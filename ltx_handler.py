@@ -1,3 +1,6 @@
+import runpod
+
+
 def handler(job):
     print("===== HANDLER TEST 1 =====", flush=True)
     print(f"JOB RECIBIDO: {job}", flush=True)
@@ -7,3 +10,8 @@ def handler(job):
         "message": "El handler propio funciona",
         "job_id": job.get("id")
     }
+
+
+runpod.serverless.start({
+    "handler": handler
+})
