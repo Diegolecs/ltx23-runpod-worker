@@ -4,6 +4,10 @@ COPY requirements.txt /tmp/requirements.txt
 COPY download_models.sh /download_models.sh
 COPY handler.py /handler.py
 
+RUN echo "=== HANDLER QUE QUEDO EN LA IMAGEN ===" && \
+    grep -n "DEBUG TEST: ENTRE A handler(job)" /handler.py && \
+    echo "=== FIN CHECK HANDLER ==="
+
 RUN chmod +x /download_models.sh
 
 RUN git clone --depth 1 https://github.com/Lightricks/ComfyUI-LTXVideo.git /comfyui/custom_nodes/ComfyUI-LTXVideo
