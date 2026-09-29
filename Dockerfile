@@ -2,13 +2,11 @@ FROM runpod/worker-comfyui:5.10.0-base-cuda12.8.1
 
 COPY requirements.txt /tmp/requirements.txt
 COPY download_models.sh /download_models.sh
-
-ARG HANDLER_BUILD=20260929_TEST01
 COPY ltx_handler.py /ltx_handler.py
 
-RUN echo "=== VERIFICANDO HANDLER NUEVO ===" && \
-    grep -n "HANDLER TEST 1" /ltx_handler.py && \
-    echo "=== HANDLER NUEVO CONFIRMADO ==="
+RUN echo "=== VERIFICANDO HANDLER REAL ===" && \
+    grep -n "DEBUG TEST: ENTRE A handler(job)" /ltx_handler.py && \
+    echo "=== HANDLER REAL CONFIRMADO ==="
 
 RUN chmod +x /download_models.sh
 
