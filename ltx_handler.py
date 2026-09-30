@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -32,12 +33,16 @@ COMFY_PROCESS = None
 
 GITHUB_OWNER = "Diegolecs"
 GITHUB_REPO = "ltx23-runpod-worker"
+
 GITHUB_API_BASE = (
     f"https://api.github.com/repos/"
     f"{GITHUB_OWNER}/{GITHUB_REPO}"
 )
 
 GITHUB_API_VERSION = "2026-03-10"
+
+GITHUB_TRANSFER_TAG = "video-transfer"
+GITHUB_TRANSFER_RELEASE_NAME = "LTX Video Transfer"
 
 
 # ============================================================
@@ -52,15 +57,25 @@ def log(message):
 # HTTP HELPERS - COMFYUI
 # ============================================================
 
-def http_request(method, path, payload=None, timeout=30):
+def http_request(
+    method,
+    path,
+    payload=None,
+    timeout=30,
+):
     url = f"{COMFY_URL}{path}"
 
     data = None
     headers = {}
 
     if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
+        data = json.dumps(
+            payload
+        ).encode("utf-8")
+
+        headers["Content-Type"] = (
+            "application/json"
+        )
 
     request = urllib.request.Request(
         url,
@@ -69,20 +84,36 @@ def http_request(method, path, payload=None, timeout=30):
         method=method,
     )
 
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(
+        request,
+        timeout=timeout,
+    ) as response:
         raw = response.read()
 
     if not raw:
         return {}
 
-    return json.loads(raw.decode("utf-8"))
+    return json.loads(
+        raw.decode("utf-8")
+    )
 
 
-def get_json(path, timeout=30):
-    return http_request("GET", path, timeout=timeout)
+def get_json(
+    path,
+    timeout=30,
+):
+    return http_request(
+        "GET",
+        path,
+        timeout=timeout,
+    )
 
 
-def post_json(path, payload, timeout=30):
+def post_json(
+    path,
+    payload,
+    timeout=30,
+):
     return http_request(
         "POST",
         path,
@@ -101,7 +132,9 @@ def github_request(
     payload=None,
     timeout=30,
 ):
-    token = os.getenv("GITHUB_TOKEN")
+    token = os.getenv(
+        "GITHUB_TOKEN"
+    )
 
     if not token:
         raise RuntimeError(
@@ -115,10 +148,18 @@ def github_request(
     )
 
     headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": GITHUB_API_VERSION,
-        "User-Agent": "ltx23-runpod-worker",
+        "Accept": (
+            "application/vnd.github+json"
+        ),
+        "Authorization": (
+            f"Bearer {token}"
+        ),
+        "X-GitHub-Api-Version": (
+            GITHUB_API_VERSION
+        ),
+        "User-Agent": (
+            "ltx23-runpod-worker"
+        ),
     }
 
     data = None
@@ -145,27 +186,29 @@ def github_request(
             timeout=timeout,
         ) as response:
             raw = response.read()
-
             status_code = response.status
 
     except urllib.error.HTTPError as exc:
         try:
             raw_error = exc.read()
+
             error_body = raw_error.decode(
                 "utf-8",
                 errors="replace",
             )
+
         except Exception:
             error_body = ""
 
         raise RuntimeError(
-            "GitHub API respondió con HTTP "
-            f"{exc.code}: {error_body}"
+            "GitHub API respondió con "
+            f"HTTP {exc.code}: {error_body}"
         ) from exc
 
     except urllib.error.URLError as exc:
         raise RuntimeError(
-            f"No se pudo conectar con GitHub: {exc}"
+            f"No se pudo conectar con GitHub: "
+            f"{exc}"
         ) from exc
 
     if not raw:
@@ -177,6 +220,7 @@ def github_request(
         result = json.loads(
             raw.decode("utf-8")
         )
+
     except json.JSONDecodeError:
         result = {
             "raw": raw.decode(
@@ -185,18 +229,37 @@ def github_request(
             )
         }
 
-    if isinstance(result, dict):
-        result["_status_code"] = status_code
+    if isinstance(
+        result,
+        dict,
+    ):
+        result["_status_code"] = (
+            status_code
+        )
 
     return result
 
 
-def github_test():
-    log("==============================================")
-    log("GITHUB TEST")
-    log("==============================================")
+# ============================================================
+# GITHUB TEST
+# ============================================================
 
-    token = os.getenv("GITHUB_TOKEN")
+def github_test():
+    log(
+        "=============================================="
+    )
+
+    log(
+        "GITHUB TEST"
+    )
+
+    log(
+        "=============================================="
+    )
+
+    token = os.getenv(
+        "GITHUB_TOKEN"
+    )
 
     if not token:
         return {
@@ -207,8 +270,13 @@ def github_test():
             ),
         }
 
-    log("=== GITHUB_TOKEN ENCONTRADO ===")
-    log("=== CONSULTANDO REPOSITORIO GITHUB ===")
+    log(
+        "=== GITHUB_TOKEN ENCONTRADO ==="
+    )
+
+    log(
+        "=== CONSULTANDO REPOSITORIO GITHUB ==="
+    )
 
     repo_data = github_request(
         "GET",
@@ -240,15 +308,394 @@ def github_test():
 
 
 # ============================================================
+# GITHUB RELEASE
+# ============================================================
+
+def github_get_or_create_transfer_release():
+
+    log(
+        "=== BUSCANDO RELEASE DE TRANSFERENCIA ==="
+    )
+
+    releases = github_request(
+        "GET",
+        "/releases?per_page=100",
+        timeout=30,
+    )
+
+    if not isinstance(
+        releases,
+        list,
+    ):
+        raise RuntimeError(
+            "GitHub no devolvió una lista "
+            "de releases."
+        )
+
+    for release in releases:
+
+        if (
+            release.get("tag_name")
+            == GITHUB_TRANSFER_TAG
+        ):
+            log(
+                f"=== RELEASE ENCONTRADO "
+                f"ID={release.get('id')} ==="
+            )
+
+            return release
+
+    log(
+        "=== RELEASE NO EXISTE ==="
+    )
+
+    log(
+        "=== CREANDO RELEASE DE TRANSFERENCIA ==="
+    )
+
+    release = github_request(
+        "POST",
+        "/releases",
+        payload={
+            "tag_name":
+                GITHUB_TRANSFER_TAG,
+
+            "name":
+                GITHUB_TRANSFER_RELEASE_NAME,
+
+            "body": (
+                "Release temporal utilizado "
+                "para transferencia de videos LTX."
+            ),
+
+            "draft":
+                False,
+
+            "prerelease":
+                True,
+
+            "make_latest":
+                False,
+
+            "generate_release_notes":
+                False,
+        },
+
+        timeout=60,
+    )
+
+    log(
+        f"=== RELEASE CREADO "
+        f"ID={release.get('id')} ==="
+    )
+
+    return release
+
+
+# ============================================================
+# GITHUB UPLOAD
+# ============================================================
+
+def github_upload_file(
+    file_path,
+    asset_name=None,
+):
+    file_path = Path(
+        file_path
+    )
+
+    if not file_path.is_file():
+        raise FileNotFoundError(
+            f"No existe el archivo: "
+            f"{file_path}"
+        )
+
+    if asset_name is None:
+        asset_name = (
+            f"ltx_test_"
+            f"{int(time.time())}.mp4"
+        )
+
+    release = (
+        github_get_or_create_transfer_release()
+    )
+
+    upload_url = release.get(
+        "upload_url"
+    )
+
+    if not upload_url:
+        raise RuntimeError(
+            "GitHub Release no devolvió "
+            "upload_url."
+        )
+
+    upload_url = upload_url.split(
+        "{",
+        1,
+    )[0]
+
+    query = urllib.parse.urlencode({
+        "name":
+            asset_name,
+    })
+
+    final_url = (
+        f"{upload_url}?{query}"
+    )
+
+    log(
+        "=============================================="
+    )
+
+    log(
+        "SUBIENDO VIDEO A GITHUB"
+    )
+
+    log(
+        "=============================================="
+    )
+
+    log(
+        f"ARCHIVO: {file_path}"
+    )
+
+    log(
+        f"NOMBRE ASSET: {asset_name}"
+    )
+
+    file_size = file_path.stat().st_size
+
+    log(
+        f"TAMAÑO: {file_size:,} bytes"
+    )
+
+    token = os.getenv(
+        "GITHUB_TOKEN"
+    )
+
+    if not token:
+        raise RuntimeError(
+            "GITHUB_TOKEN no está configurado."
+        )
+
+    with open(
+        file_path,
+        "rb",
+    ) as file:
+        data = file.read()
+
+    headers = {
+        "Accept": (
+            "application/vnd.github+json"
+        ),
+        "Authorization": (
+            f"Bearer {token}"
+        ),
+        "X-GitHub-Api-Version": (
+            GITHUB_API_VERSION
+        ),
+        "User-Agent": (
+            "ltx23-runpod-worker"
+        ),
+        "Content-Type": (
+            "video/mp4"
+        ),
+    }
+
+    request = urllib.request.Request(
+        final_url,
+        data=data,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=300,
+        ) as response:
+            raw = response.read()
+            status_code = response.status
+
+    except urllib.error.HTTPError as exc:
+
+        try:
+            error_body = (
+                exc.read()
+                .decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            )
+
+        except Exception:
+            error_body = ""
+
+        raise RuntimeError(
+            "GitHub upload respondió con "
+            f"HTTP {exc.code}: {error_body}"
+        ) from exc
+
+    except urllib.error.URLError as exc:
+
+        raise RuntimeError(
+            "No se pudo conectar con GitHub "
+            "durante el upload: "
+            f"{exc}"
+        ) from exc
+
+    try:
+        result = json.loads(
+            raw.decode("utf-8")
+        )
+
+    except json.JSONDecodeError as exc:
+
+        raise RuntimeError(
+            "GitHub devolvió una respuesta "
+            "que no es JSON."
+        ) from exc
+
+    if status_code != 201:
+        raise RuntimeError(
+            "GitHub esperaba HTTP 201 "
+            f"pero devolvió {status_code}."
+        )
+
+    asset_id = result.get(
+        "id"
+    )
+
+    browser_download_url = (
+        result.get(
+            "browser_download_url"
+        )
+    )
+
+    if not asset_id:
+        raise RuntimeError(
+            "GitHub upload terminó pero "
+            "no devolvió asset_id."
+        )
+
+    if not browser_download_url:
+        raise RuntimeError(
+            "GitHub upload terminó pero "
+            "no devolvió "
+            "browser_download_url."
+        )
+
+    log(
+        "=== UPLOAD COMPLETADO ==="
+    )
+
+    log(
+        f"ASSET ID: {asset_id}"
+    )
+
+    log(
+        "DOWNLOAD URL: "
+        f"{browser_download_url}"
+    )
+
+    return {
+        "asset_id":
+            asset_id,
+
+        "filename":
+            result.get(
+                "name",
+                asset_name,
+            ),
+
+        "size_bytes":
+            result.get(
+                "size",
+                file_size,
+            ),
+
+        "browser_download_url":
+            browser_download_url,
+
+        "release_id":
+            release.get(
+                "id"
+            ),
+
+        "release_tag":
+            release.get(
+                "tag_name"
+            ),
+    }
+
+
+# ============================================================
+# GITHUB DELETE ASSET
+# ============================================================
+
+def github_delete_asset(
+    asset_id,
+):
+    asset_id = int(
+        asset_id
+    )
+
+    log(
+        "=============================================="
+    )
+
+    log(
+        "ELIMINANDO ASSET GITHUB"
+    )
+
+    log(
+        "=============================================="
+    )
+
+    github_request(
+        "DELETE",
+        f"/releases/assets/{asset_id}",
+        timeout=30,
+    )
+
+    log(
+        f"=== ASSET {asset_id} ELIMINADO ==="
+    )
+
+    return {
+        "ok":
+            True,
+
+        "action":
+            "github_delete_asset",
+
+        "asset_id":
+            asset_id,
+
+        "deleted":
+            True,
+    }
+
+
+# ============================================================
 # COMFYUI
 # ============================================================
 
 def start_comfyui():
     global COMFY_PROCESS
 
-    log("==============================================")
-    log("INICIANDO COMFYUI")
-    log("==============================================")
+    log(
+        "=============================================="
+    )
+
+    log(
+        "INICIANDO COMFYUI"
+    )
+
+    log(
+        "=============================================="
+    )
 
     command = [
         COMFY_PYTHON,
@@ -279,15 +726,21 @@ def start_comfyui():
         f"PID={COMFY_PROCESS.pid} ==="
     )
 
-    log("=== ESPERANDO COMFYUI ===")
+    log(
+        "=== ESPERANDO COMFYUI ==="
+    )
 
     started = time.time()
 
     while True:
-        if COMFY_PROCESS.poll() is not None:
+
+        if (
+            COMFY_PROCESS.poll()
+            is not None
+        ):
             raise RuntimeError(
-                f"ComfyUI terminó prematuramente "
-                f"con código "
+                f"ComfyUI terminó "
+                f"prematuramente con código "
                 f"{COMFY_PROCESS.returncode}"
             )
 
@@ -296,10 +749,15 @@ def start_comfyui():
                 "/system_stats",
                 timeout=3,
             )
+
             break
 
         except Exception:
-            if time.time() - started > 180:
+
+            if (
+                time.time() - started
+                > 180
+            ):
                 raise RuntimeError(
                     "ComfyUI no respondió "
                     "dentro de 180 segundos."
@@ -329,15 +787,14 @@ SAFE_RUNPOD_ENV_KEYS = [
 
 
 def get_storage_info():
-    """
-    Devuelve información útil del Network Volume y del entorno
-    RunPod, sin revelar credenciales.
-    """
 
     info = {}
 
     for key in SAFE_RUNPOD_ENV_KEYS:
-        value = os.getenv(key)
+
+        value = os.getenv(
+            key
+        )
 
         if value is not None:
             info[key] = value
@@ -357,7 +814,9 @@ def get_storage_info():
         volume_exists
         and volume_is_dir
     ):
+
         try:
+
             NETWORK_VOLUME_DIR.mkdir(
                 parents=True,
                 exist_ok=True,
@@ -380,26 +839,36 @@ def get_storage_info():
             writable = True
 
         except Exception:
+
             try:
+
                 if write_test is not None:
                     write_test.unlink(
                         missing_ok=True
                     )
+
             except Exception:
                 pass
 
     disk = None
 
     if volume_exists:
+
         try:
+
             usage = shutil.disk_usage(
                 NETWORK_VOLUME_DIR
             )
 
             disk = {
-                "total_bytes": usage.total,
-                "used_bytes": usage.used,
-                "free_bytes": usage.free,
+                "total_bytes":
+                    usage.total,
+
+                "used_bytes":
+                    usage.used,
+
+                "free_bytes":
+                    usage.free,
             }
 
         except Exception:
@@ -411,15 +880,21 @@ def get_storage_info():
         volume_exists
         and volume_is_dir
     ):
+
         try:
+
             entries = sorted(
                 NETWORK_VOLUME_DIR.iterdir(),
-                key=lambda p: p.name.lower(),
+                key=lambda p:
+                    p.name.lower(),
             )
 
             for entry in entries[:100]:
+
                 contents.append({
-                    "name": entry.name,
+                    "name":
+                        entry.name,
+
                     "type": (
                         "directory"
                         if entry.is_dir()
@@ -431,23 +906,32 @@ def get_storage_info():
             pass
 
     return {
-        "ok": True,
-        "action": "storage_info",
-        "network_volume_path": str(
-            NETWORK_VOLUME_DIR
-        ),
-        "network_volume_exists": (
-            volume_exists
-        ),
-        "network_volume_is_directory": (
-            volume_is_dir
-        ),
-        "network_volume_writable": (
-            writable
-        ),
-        "disk": disk,
-        "runpod_environment": info,
-        "network_volume_contents": contents,
+        "ok":
+            True,
+
+        "action":
+            "storage_info",
+
+        "network_volume_path":
+            str(NETWORK_VOLUME_DIR),
+
+        "network_volume_exists":
+            volume_exists,
+
+        "network_volume_is_directory":
+            volume_is_dir,
+
+        "network_volume_writable":
+            writable,
+
+        "disk":
+            disk,
+
+        "runpod_environment":
+            info,
+
+        "network_volume_contents":
+            contents,
     }
 
 
@@ -488,7 +972,10 @@ def get_object_info():
 
 
 def list_nodes():
-    log("=== CONSULTANDO /object_info ===")
+
+    log(
+        "=== CONSULTANDO /object_info ==="
+    )
 
     object_info = get_object_info()
 
@@ -500,20 +987,29 @@ def list_nodes():
     result = {}
 
     for node_name in LTX_NODE_NAMES:
+
         if node_name in object_info:
-            result[node_name] = object_info[
-                node_name
-            ]
+            result[node_name] = (
+                object_info[node_name]
+            )
 
     return {
-        "ok": True,
-        "action": "list_nodes",
-        "total_nodes": len(object_info),
-        "requested_nodes": result,
+        "ok":
+            True,
+
+        "action":
+            "list_nodes",
+
+        "total_nodes":
+            len(object_info),
+
+        "requested_nodes":
+            result,
     }
 
 
 def inspect_ltx():
+
     log(
         "=== CONSULTANDO "
         "INFORMACION LTX ==="
@@ -524,15 +1020,21 @@ def inspect_ltx():
     result = {}
 
     for node_name in LTX_NODE_NAMES:
+
         if node_name in object_info:
-            result[node_name] = object_info[
-                node_name
-            ]
+            result[node_name] = (
+                object_info[node_name]
+            )
 
     return {
-        "ok": True,
-        "action": "inspect_ltx",
-        "nodes": result,
+        "ok":
+            True,
+
+        "action":
+            "inspect_ltx",
+
+        "nodes":
+            result,
     }
 
 
@@ -541,9 +1043,12 @@ def inspect_ltx():
 # ============================================================
 
 def validate_workflow_nodes(
-    workflow
+    workflow,
 ):
-    log("=== CONSULTANDO /object_info ===")
+
+    log(
+        "=== CONSULTANDO /object_info ==="
+    )
 
     object_info = get_object_info()
 
@@ -555,29 +1060,38 @@ def validate_workflow_nodes(
     missing = []
 
     for node_id, node in workflow.items():
+
         class_type = node.get(
             "class_type"
         )
 
         if not class_type:
+
             missing.append({
-                "node_id": node_id,
-                "reason": (
-                    "missing_class_type"
-                ),
+                "node_id":
+                    node_id,
+
+                "reason":
+                    "missing_class_type",
             })
+
             continue
 
         if class_type not in object_info:
+
             missing.append({
-                "node_id": node_id,
-                "class_type": class_type,
-                "reason": (
-                    "node_not_found"
-                ),
+                "node_id":
+                    node_id,
+
+                "class_type":
+                    class_type,
+
+                "reason":
+                    "node_not_found",
             })
 
     if missing:
+
         log(
             "=== NODOS FALTANTES ==="
         )
@@ -621,8 +1135,11 @@ def build_ltx_workflow(
     )
 
     workflow = {
+
         "1": {
-            "class_type": "UnetLoaderGGUF",
+            "class_type":
+                "UnetLoaderGGUF",
+
             "inputs": {
                 "unet_name":
                     "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
@@ -630,7 +1147,9 @@ def build_ltx_workflow(
         },
 
         "2": {
-            "class_type": "VAELoader",
+            "class_type":
+                "VAELoader",
+
             "inputs": {
                 "vae_name":
                     "LTX23_video_vae_bf16.safetensors"
@@ -638,7 +1157,9 @@ def build_ltx_workflow(
         },
 
         "3": {
-            "class_type": "VAELoader",
+            "class_type":
+                "VAELoader",
+
             "inputs": {
                 "vae_name":
                     "LTX23_audio_vae_bf16.safetensors"
@@ -646,141 +1167,255 @@ def build_ltx_workflow(
         },
 
         "4": {
-            "class_type": "DualCLIPLoaderGGUF",
+            "class_type":
+                "DualCLIPLoaderGGUF",
+
             "inputs": {
+
                 "clip_name1":
                     "gemma-3-12b-it-Q2_K.gguf",
+
                 "clip_name2":
                     "ltx-2.3_text_projection_bf16.safetensors",
-                "type": "ltxv",
+
+                "type":
+                    "ltxv",
             },
         },
 
         "5": {
-            "class_type": "CLIPTextEncode",
+            "class_type":
+                "CLIPTextEncode",
+
             "inputs": {
-                "text": prompt,
-                "clip": ["4", 0],
+
+                "text":
+                    prompt,
+
+                "clip":
+                    ["4", 0],
             },
         },
 
         "6": {
-            "class_type": "CLIPTextEncode",
+            "class_type":
+                "CLIPTextEncode",
+
             "inputs": {
-                "text": negative_prompt,
-                "clip": ["4", 0],
+
+                "text":
+                    negative_prompt,
+
+                "clip":
+                    ["4", 0],
             },
         },
 
         "7": {
-            "class_type": "LTXVConditioning",
+            "class_type":
+                "LTXVConditioning",
+
             "inputs": {
-                "positive": ["5", 0],
-                "negative": ["6", 0],
-                "frame_rate": float(fps),
+
+                "positive":
+                    ["5", 0],
+
+                "negative":
+                    ["6", 0],
+
+                "frame_rate":
+                    float(fps),
             },
         },
 
         "8": {
-            "class_type": "EmptyLTXVLatentVideo",
+            "class_type":
+                "EmptyLTXVLatentVideo",
+
             "inputs": {
-                "width": int(width),
-                "height": int(height),
-                "length": int(length),
-                "batch_size": 1,
+
+                "width":
+                    int(width),
+
+                "height":
+                    int(height),
+
+                "length":
+                    int(length),
+
+                "batch_size":
+                    1,
             },
         },
 
         "9": {
-            "class_type": "LTXVEmptyLatentAudio",
+            "class_type":
+                "LTXVEmptyLatentAudio",
+
             "inputs": {
-                "audio_vae": ["3", 0],
-                "batch_size": 1,
-                "frame_rate": float(fps),
-                "frames_number": int(length),
+
+                "audio_vae":
+                    ["3", 0],
+
+                "batch_size":
+                    1,
+
+                "frame_rate":
+                    float(fps),
+
+                "frames_number":
+                    int(length),
             },
         },
 
         "10": {
-            "class_type": "LTXVConcatAVLatent",
+            "class_type":
+                "LTXVConcatAVLatent",
+
             "inputs": {
-                "video_latent": ["8", 0],
-                "audio_latent": ["9", 0],
+
+                "video_latent":
+                    ["8", 0],
+
+                "audio_latent":
+                    ["9", 0],
             },
         },
 
         "11": {
-            "class_type": "LTXVScheduler",
+            "class_type":
+                "LTXVScheduler",
+
             "inputs": {
-                "steps": int(steps),
-                "max_shift": 2.05,
-                "base_shift": 0.95,
-                "stretch": True,
-                "terminal": 0.1,
-                "latent": ["10", 0],
+
+                "steps":
+                    int(steps),
+
+                "max_shift":
+                    2.05,
+
+                "base_shift":
+                    0.95,
+
+                "stretch":
+                    True,
+
+                "terminal":
+                    0.1,
+
+                "latent":
+                    ["10", 0],
             },
         },
 
         "12": {
-            "class_type": "KSamplerSelect",
+            "class_type":
+                "KSamplerSelect",
+
             "inputs": {
-                "sampler_name": "euler",
+
+                "sampler_name":
+                    "euler",
             },
         },
 
         "13": {
-            "class_type": "RandomNoise",
+            "class_type":
+                "RandomNoise",
+
             "inputs": {
-                "noise_seed": int(seed),
+
+                "noise_seed":
+                    int(seed),
             },
         },
 
         "14": {
-            "class_type": "CFGGuider",
+            "class_type":
+                "CFGGuider",
+
             "inputs": {
-                "model": ["1", 0],
-                "positive": ["7", 0],
-                "negative": ["7", 1],
-                "cfg": float(cfg),
+
+                "model":
+                    ["1", 0],
+
+                "positive":
+                    ["7", 0],
+
+                "negative":
+                    ["7", 1],
+
+                "cfg":
+                    float(cfg),
             },
         },
 
         "15": {
-            "class_type": "SamplerCustomAdvanced",
+            "class_type":
+                "SamplerCustomAdvanced",
+
             "inputs": {
-                "noise": ["13", 0],
-                "guider": ["14", 0],
-                "sampler": ["12", 0],
-                "sigmas": ["11", 0],
-                "latent_image": ["10", 0],
+
+                "noise":
+                    ["13", 0],
+
+                "guider":
+                    ["14", 0],
+
+                "sampler":
+                    ["12", 0],
+
+                "sigmas":
+                    ["11", 0],
+
+                "latent_image":
+                    ["10", 0],
             },
         },
 
         "16": {
-            "class_type": "LTXVSeparateAVLatent",
+            "class_type":
+                "LTXVSeparateAVLatent",
+
             "inputs": {
-                "av_latent": ["15", 0],
+
+                "av_latent":
+                    ["15", 0],
             },
         },
 
         "17": {
-            "class_type": "DecodeAndSaveVideo",
-            "inputs": {
-                "video_latent": ["16", 0],
-                "audio_latent": ["16", 1],
-                "fps": float(fps),
-                "filename_prefix": (
-                    "video/LTX23_test"
-                ),
-                "format": "mp4",
-                "codec": "h264",
-                "video_vae": ["2", 0],
-                "audio_vae": ["3", 0],
+            "class_type":
+                "DecodeAndSaveVideo",
 
-                # IMPORTANTE:
-                # esta fue la correccion que hizo que
-                # DecodeAndSaveVideo dejara de fallar.
-                "tiling": "disabled",
+            "inputs": {
+
+                "video_latent":
+                    ["16", 0],
+
+                "audio_latent":
+                    ["16", 1],
+
+                "fps":
+                    float(fps),
+
+                "filename_prefix":
+                    "video/LTX23_test",
+
+                "format":
+                    "mp4",
+
+                "codec":
+                    "h264",
+
+                "video_vae":
+                    ["2", 0],
+
+                "audio_vae":
+                    ["3", 0],
+
+                "tiling":
+                    "disabled",
             },
         },
     }
@@ -796,6 +1431,7 @@ def wait_for_execution(
     prompt_id,
     timeout=1800,
 ):
+
     log(
         f"=== ESPERANDO EJECUCION "
         f"{prompt_id} ==="
@@ -804,6 +1440,7 @@ def wait_for_execution(
     started = time.time()
 
     while True:
+
         if (
             time.time() - started
             > timeout
@@ -814,25 +1451,32 @@ def wait_for_execution(
             )
 
         try:
+
             history = get_json(
                 f"/history/{prompt_id}",
                 timeout=30,
             )
 
         except Exception as exc:
+
             log(
                 f"Advertencia consultando "
                 f"history: {exc}"
             )
 
             time.sleep(2)
+
             continue
 
         if prompt_id not in history:
+
             time.sleep(2)
+
             continue
 
-        entry = history[prompt_id]
+        entry = history[
+            prompt_id
+        ]
 
         status = entry.get(
             "status",
@@ -843,6 +1487,7 @@ def wait_for_execution(
             status,
             dict,
         ):
+
             completed = status.get(
                 "completed",
                 False,
@@ -865,6 +1510,7 @@ def wait_for_execution(
                 )
                 == "error"
             ):
+
                 raise RuntimeError(
                     json.dumps(
                         entry,
@@ -874,6 +1520,7 @@ def wait_for_execution(
                 )
 
             if completed:
+
                 log(
                     "=== EJECUCION "
                     "COMPLETADA ==="
@@ -897,8 +1544,9 @@ VIDEO_EXTENSIONS = {
 
 
 def outputs_from_history(
-    history_entry
+    history_entry,
 ):
+
     candidates = []
 
     outputs = history_entry.get(
@@ -929,6 +1577,7 @@ def outputs_from_history(
             "images",
             "files",
         ]:
+
             items = node_output.get(
                 key,
                 [],
@@ -973,6 +1622,7 @@ def outputs_from_history(
                     continue
 
                 if subfolder:
+
                     path = (
                         COMFY_OUTPUT_DIR
                         / subfolder
@@ -980,12 +1630,15 @@ def outputs_from_history(
                     )
 
                 else:
+
                     path = (
                         COMFY_OUTPUT_DIR
                         / filename
                     )
 
-                candidates.append(path)
+                candidates.append(
+                    path
+                )
 
     return candidates
 
@@ -994,9 +1647,6 @@ def find_generated_video(
     history_entry,
     generation_started,
 ):
-    # --------------------------------------------------------
-    # 1. Primero usamos la información exacta del history.
-    # --------------------------------------------------------
 
     history_candidates = (
         outputs_from_history(
@@ -1005,12 +1655,9 @@ def find_generated_video(
     )
 
     for path in history_candidates:
+
         if path.is_file():
             return path
-
-    # --------------------------------------------------------
-    # 2. Fallback: buscar MP4 recientes en output.
-    # --------------------------------------------------------
 
     if not COMFY_OUTPUT_DIR.exists():
         return None
@@ -1029,13 +1676,16 @@ def find_generated_video(
             continue
 
         try:
+
             mtime = path.stat().st_mtime
 
             if (
                 mtime
                 >= generation_started - 5
             ):
-                recent.append(path)
+                recent.append(
+                    path
+                )
 
         except OSError:
             continue
@@ -1044,7 +1694,8 @@ def find_generated_video(
         return None
 
     recent.sort(
-        key=lambda p: p.stat().st_mtime,
+        key=lambda p:
+            p.stat().st_mtime,
         reverse=True,
     )
 
@@ -1058,7 +1709,10 @@ def find_generated_video(
 def copy_video_to_network_volume(
     source_path,
 ):
-    source_path = Path(source_path)
+
+    source_path = Path(
+        source_path
+    )
 
     if not source_path.is_file():
         raise FileNotFoundError(
@@ -1103,9 +1757,9 @@ def copy_video_to_network_volume(
 
     if not target_path.is_file():
         raise RuntimeError(
-            "El video no apareció "
-            "en el Network Volume "
-            "después de la copia."
+            "El video no apareció en el "
+            "Network Volume después "
+            "de la copia."
         )
 
     size_bytes = (
@@ -1120,10 +1774,13 @@ def copy_video_to_network_volume(
     return {
         "filename":
             target_path.name,
+
         "source_path":
             str(source_path),
+
         "network_path":
             str(target_path),
+
         "size_bytes":
             size_bytes,
     }
@@ -1134,8 +1791,9 @@ def copy_video_to_network_volume(
 # ============================================================
 
 def generate_video(
-    job_input
+    job_input,
 ):
+
     prompt = str(
         job_input.get(
             "prompt",
@@ -1209,13 +1867,33 @@ def generate_video(
         "=============================================="
     )
 
-    log(f"prompt={prompt}")
-    log(f"size={width}x{height}")
-    log(f"frames={length}")
-    log(f"fps={fps}")
-    log(f"steps={steps}")
-    log(f"cfg={cfg}")
-    log(f"seed={seed}")
+    log(
+        f"prompt={prompt}"
+    )
+
+    log(
+        f"size={width}x{height}"
+    )
+
+    log(
+        f"frames={length}"
+    )
+
+    log(
+        f"fps={fps}"
+    )
+
+    log(
+        f"steps={steps}"
+    )
+
+    log(
+        f"cfg={cfg}"
+    )
+
+    log(
+        f"seed={seed}"
+    )
 
     workflow = build_ltx_workflow(
         prompt=prompt,
@@ -1249,16 +1927,20 @@ def generate_video(
         "A COMFYUI ==="
     )
 
-    generation_started = time.time()
+    generation_started = (
+        time.time()
+    )
 
     response = post_json(
         "/prompt",
         {
-            "prompt": workflow,
-            "client_id": (
-                "ltx-runpod-handler"
-            ),
+            "prompt":
+                workflow,
+
+            "client_id":
+                "ltx-runpod-handler",
         },
+
         timeout=120,
     )
 
@@ -1275,6 +1957,7 @@ def generate_video(
     )
 
     if response.get("error"):
+
         raise RuntimeError(
             json.dumps(
                 response,
@@ -1288,25 +1971,31 @@ def generate_video(
     )
 
     if not prompt_id:
+
         raise RuntimeError(
             "ComfyUI no devolvio "
             "prompt_id."
         )
 
-    history_entry = wait_for_execution(
-        prompt_id
+    history_entry = (
+        wait_for_execution(
+            prompt_id
+        )
     )
 
     log(
         "=== GENERACION TERMINADA ==="
     )
 
-    video_path = find_generated_video(
-        history_entry,
-        generation_started,
+    video_path = (
+        find_generated_video(
+            history_entry,
+            generation_started,
+        )
     )
 
     if video_path is None:
+
         raise RuntimeError(
             "La ejecucion de ComfyUI "
             "termino pero no encontramos "
@@ -1326,42 +2015,73 @@ def generate_video(
     )
 
     outputs = {
+
         "videos": [
             {
                 "filename":
                     network_output[
                         "filename"
                     ],
+
                 "path":
                     network_output[
                         "network_path"
                     ],
+
                 "size_bytes":
                     network_output[
                         "size_bytes"
                     ],
             }
         ],
+
         "images": [],
+
         "gifs": [],
+
         "other": {},
     }
 
     return {
-        "ok": True,
-        "action": "generate",
-        "prompt_id": prompt_id,
+
+        "ok":
+            True,
+
+        "action":
+            "generate",
+
+        "prompt_id":
+            prompt_id,
+
         "settings": {
-            "width": width,
-            "height": height,
-            "length": length,
-            "fps": fps,
-            "steps": steps,
-            "cfg": cfg,
-            "seed": seed,
+
+            "width":
+                width,
+
+            "height":
+                height,
+
+            "length":
+                length,
+
+            "fps":
+                fps,
+
+            "steps":
+                steps,
+
+            "cfg":
+                cfg,
+
+            "seed":
+                seed,
         },
-        "outputs": outputs,
-        "video": network_output,
+
+        "outputs":
+            outputs,
+
+        "video":
+            network_output,
     }
 
 
@@ -1370,12 +2090,17 @@ def generate_video(
 # ============================================================
 
 def test_handler():
+
     return {
-        "ok": True,
-        "action": "test",
-        "message": (
-            "LTX handler funcionando."
-        ),
+
+        "ok":
+            True,
+
+        "action":
+            "test",
+
+        "message":
+            "LTX handler funcionando.",
     }
 
 
@@ -1384,6 +2109,7 @@ def test_handler():
 # ============================================================
 
 def handler(job):
+
     job_input = job.get(
         "input",
         {},
@@ -1393,6 +2119,7 @@ def handler(job):
         job_input,
         dict,
     ):
+
         raise ValueError(
             "job.input debe ser un objeto."
         )
@@ -1419,7 +2146,7 @@ def handler(job):
     )
 
     # --------------------------------------------------------
-    # TEST
+    # TEST NORMAL
     # --------------------------------------------------------
 
     if action == "test":
@@ -1433,16 +2160,74 @@ def handler(job):
         return github_test()
 
     # --------------------------------------------------------
+    # GITHUB UPLOAD TEST
+    # --------------------------------------------------------
+
+    if action == "github_upload_test":
+
+        test_path = job_input.get(
+            "path",
+            "/runpod-volume/video/"
+            "LTX23_test_00001_.mp4",
+        )
+
+        result = github_upload_file(
+            test_path,
+            asset_name=(
+                f"ltx_test_"
+                f"{int(time.time())}.mp4"
+            ),
+        )
+
+        return {
+
+            "ok":
+                True,
+
+            "action":
+                "github_upload_test",
+
+            "file":
+                test_path,
+
+            "upload":
+                result,
+        }
+
+    # --------------------------------------------------------
+    # GITHUB DELETE ASSET
+    # --------------------------------------------------------
+
+    if action == "github_delete_asset":
+
+        asset_id = job_input.get(
+            "asset_id"
+        )
+
+        if asset_id is None:
+
+            raise ValueError(
+                "Falta input.asset_id"
+            )
+
+        return github_delete_asset(
+            asset_id
+        )
+
+    # --------------------------------------------------------
     # STORAGE INFO
     # --------------------------------------------------------
 
     if action == "storage_info":
+
         log(
             "=== CONSULTANDO "
             "STORAGE INFO ==="
         )
 
-        result = get_storage_info()
+        result = (
+            get_storage_info()
+        )
 
         log(
             json.dumps(
@@ -1473,6 +2258,7 @@ def handler(job):
     # --------------------------------------------------------
 
     if action == "generate":
+
         return generate_video(
             job_input
         )
@@ -1482,7 +2268,8 @@ def handler(job):
     # --------------------------------------------------------
 
     raise ValueError(
-        f"Accion desconocida: {action}"
+        f"Accion desconocida: "
+        f"{action}"
     )
 
 
@@ -1491,6 +2278,7 @@ def handler(job):
 # ============================================================
 
 if __name__ == "__main__":
+
     log(
         "LTX HANDLER PROPIO"
     )
@@ -1512,5 +2300,6 @@ if __name__ == "__main__":
     import runpod
 
     runpod.serverless.start({
-        "handler": handler
+        "handler":
+            handler
     })
