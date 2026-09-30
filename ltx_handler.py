@@ -393,9 +393,6 @@ def github_get_or_create_transfer_release():
             "prerelease":
                 True,
 
-            "make_latest":
-                False,
-
             "generate_release_notes":
                 False,
         },
@@ -1535,9 +1532,8 @@ def build_workflow(
                     0,
                 ],
 
-                # IMPORTANTE:
-                # DynamicCombo V3 recibe la selección
-                # como string. NO usar un dict anidado.
+                # DynamicCombo V3:
+                # recibe la selección como string.
                 "tiling":
                     "disabled",
             },
