@@ -166,11 +166,11 @@ def get_object_info():
 
 
 # =========================================================
-# COMFYUI LOG
+# LOG COMFYUI
 # =========================================================
 
 def show_comfy_log_tail(
-    lines=150
+    lines=200
 ):
 
     log_path = "/tmp/comfyui.log"
@@ -373,7 +373,7 @@ def ensure_comfyui():
 
 
 # =========================================================
-# WORKFLOW VALIDATION
+# VALIDACIÓN DE WORKFLOW
 # =========================================================
 
 def validate_workflow_nodes(
@@ -394,8 +394,11 @@ def validate_workflow_nodes(
 
             missing.append(
                 {
-                    "node_id": node_id,
-                    "class_type": class_type
+                    "node_id":
+                        node_id,
+
+                    "class_type":
+                        class_type
                 }
             )
 
@@ -443,8 +446,11 @@ def queue_prompt(
     )
 
     payload = {
-        "prompt": workflow,
-        "client_id": client_id
+        "prompt":
+            workflow,
+
+        "client_id":
+            client_id
     }
 
     print(
@@ -567,7 +573,10 @@ def wait_for_execution(
                 flush=True
             )
 
-            if status_str == "success" and completed:
+            if (
+                status_str == "success"
+                and completed
+            ):
 
                 print(
                     "=== EJECUCION COMPLETADA ===",
@@ -640,11 +649,11 @@ def extract_outputs(
 
             continue
 
-        for key in [
+        for key in (
             "videos",
             "gifs",
             "images"
-        ]:
+        ):
 
             items = node_output.get(
                 key,
@@ -708,11 +717,13 @@ def build_ltx_workflow(
     workflow = {
 
         # =================================================
-        # 1. LTX 2.3 Q4 GGUF
+        # 1. LTX-2.3 Q4 GGUF
         # =================================================
 
         "1": {
-            "class_type": "UnetLoaderGGUF",
+            "class_type":
+                "UnetLoaderGGUF",
+
             "inputs": {
                 "unet_name":
                     "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
@@ -724,7 +735,9 @@ def build_ltx_workflow(
         # =================================================
 
         "2": {
-            "class_type": "VAELoader",
+            "class_type":
+                "VAELoader",
+
             "inputs": {
                 "vae_name":
                     "LTX23_video_vae_bf16.safetensors"
@@ -736,7 +749,9 @@ def build_ltx_workflow(
         # =================================================
 
         "3": {
-            "class_type": "VAELoader",
+            "class_type":
+                "VAELoader",
+
             "inputs": {
                 "vae_name":
                     "LTX23_audio_vae_bf16.safetensors"
@@ -744,29 +759,23 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 4. GEMMA + LTX TEXT PROJECTION
-        #
-        # IMPORTANTE:
-        # usamos DualCLIPLoader normal,
-        # NO DualCLIPLoaderGGUF.
-        #
-        # El Gemma actual es FP8 scaled.
+        # 4. GEMMA GGUF + LTX TEXT PROJECTION
         # =================================================
 
         "4": {
-            "class_type": "DualCLIPLoader",
+            "class_type":
+                "DualCLIPLoaderGGUF",
+
             "inputs": {
+
                 "clip_name1":
-                    "gemma_3_12B_it_fp8_scaled.safetensors",
+                    "gemma-3-12b-it-Q2_K.gguf",
 
                 "clip_name2":
                     "ltx-2.3_text_projection_bf16.safetensors",
 
                 "type":
-                    "ltxv",
-
-                "device":
-                    "cpu"
+                    "ltxv"
             }
         },
 
@@ -775,8 +784,11 @@ def build_ltx_workflow(
         # =================================================
 
         "5": {
-            "class_type": "CLIPTextEncode",
+            "class_type":
+                "CLIPTextEncode",
+
             "inputs": {
+
                 "text":
                     prompt_text,
 
@@ -792,8 +804,11 @@ def build_ltx_workflow(
         # =================================================
 
         "6": {
-            "class_type": "CLIPTextEncode",
+            "class_type":
+                "CLIPTextEncode",
+
             "inputs": {
+
                 "text":
                     negative_prompt,
 
@@ -902,7 +917,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 11. LTX SCHEDULER
+        # 11. SCHEDULER
         # =================================================
 
         "11": {
@@ -934,7 +949,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 12. SAMPLER
+        # 12. SAMPLER SELECT
         # =================================================
 
         "12": {
@@ -949,7 +964,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 13. RANDOM NOISE
+        # 13. NOISE
         # =================================================
 
         "13": {
@@ -994,7 +1009,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 15. SAMPLER CUSTOM ADVANCED
+        # 15. SAMPLER
         # =================================================
 
         "15": {
@@ -1048,10 +1063,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 17. DECODE + SAVE MP4
-        #
-        # NO CreateVideo
-        # NO VHS
+        # 17. DIRECT MP4
         # =================================================
 
         "17": {
@@ -1146,10 +1158,18 @@ def handler(job):
         if action == "test":
 
             result = {
-                "ok": True,
-                "action": "test",
-                "job_id": job_id,
-                "comfyui": check_comfyui()
+
+                "ok":
+                    True,
+
+                "action":
+                    "test",
+
+                "job_id":
+                    job_id,
+
+                "comfyui":
+                    check_comfyui()
             }
 
             print(
@@ -1174,6 +1194,8 @@ def handler(job):
                 "DualCLIPLoader",
 
                 "DualCLIPLoaderGGUF",
+
+                "CLIPLoaderGGUF",
 
                 "CLIPTextEncode",
 
@@ -1213,8 +1235,12 @@ def handler(job):
             ]
 
             selected_info = {
-                name: nodes.get(name)
+
+                name:
+                    nodes.get(name)
+
                 for name in target_nodes
+
                 if name in nodes
             }
 
@@ -1287,9 +1313,6 @@ def handler(job):
 
         # =================================================
         # INSPECT LTX
-        #
-        # Dejamos esta acción disponible para futuras
-        # comprobaciones sin tener que modificar el handler.
         # =================================================
 
         if action == "inspect_ltx":
@@ -1303,6 +1326,8 @@ def handler(job):
                 "DualCLIPLoader",
 
                 "DualCLIPLoaderGGUF",
+
+                "CLIPLoaderGGUF",
 
                 "CLIPTextEncode",
 
@@ -1342,8 +1367,12 @@ def handler(job):
             ]
 
             selected_info = {
-                name: nodes.get(name)
+
+                name:
+                    nodes.get(name)
+
                 for name in target_nodes
+
                 if name in nodes
             }
 
@@ -1494,21 +1523,21 @@ def handler(job):
             )
 
             # =================================================
-            # BASIC INPUT VALIDATION
+            # VALIDACIÓN DE RESOLUCIÓN
             # =================================================
 
             if width % 32 != 0:
 
                 raise ValueError(
-                    f"width debe ser divisible entre 32. "
-                    f"Valor recibido: {width}"
+                    "width debe ser divisible entre 32. "
+                    f"Valor: {width}"
                 )
 
             if height % 32 != 0:
 
                 raise ValueError(
-                    f"height debe ser divisible entre 32. "
-                    f"Valor recibido: {height}"
+                    "height debe ser divisible entre 32. "
+                    f"Valor: {height}"
                 )
 
             if (
@@ -1517,13 +1546,13 @@ def handler(job):
             ):
 
                 raise ValueError(
-                    "length debe cumplir la regla "
-                    "LTX: 8*n + 1. "
-                    f"Valor recibido: {length}"
+                    "length debe cumplir "
+                    "8*n + 1. "
+                    f"Valor: {length}"
                 )
 
             # =================================================
-            # BUILD
+            # WORKFLOW
             # =================================================
 
             workflow = build_ltx_workflow(
@@ -1552,13 +1581,8 @@ def handler(job):
             )
 
             # =================================================
-            # PRE-FLIGHT NODE CHECK
+            # PRE-FLIGHT
             # =================================================
-
-            print(
-                "=== VALIDANDO NODOS DEL WORKFLOW ===",
-                flush=True
-            )
 
             validate_workflow_nodes(
                 workflow
@@ -1582,7 +1606,7 @@ def handler(job):
             )
 
             # =================================================
-            # OUTPUTS
+            # OUTPUT
             # =================================================
 
             outputs = extract_outputs(
@@ -1681,10 +1705,6 @@ def handler(job):
 
         return result
 
-    # =====================================================
-    # GLOBAL ERROR
-    # =====================================================
-
     except Exception as e:
 
         print(
@@ -1718,9 +1738,7 @@ def handler(job):
                 str(e),
 
             "job_id":
-                job.get(
-                    "id"
-                )
+                job.get("id")
         }
 
 
