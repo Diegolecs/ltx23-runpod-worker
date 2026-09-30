@@ -1063,7 +1063,7 @@ def build_ltx_workflow(
         },
 
         # =================================================
-        # 17. DIRECT MP4
+        # 17. DECODE + SAVE MP4
         # =================================================
 
         "17": {
@@ -1104,10 +1104,11 @@ def build_ltx_workflow(
                     0
                 ],
 
-                "tiling": {
-                    "tiling":
-                        "disabled"
-                }
+                # IMPORTANTE:
+                # DynamicCombo V3 usa el valor
+                # de la opción directamente.
+                "tiling":
+                    "disabled"
             }
         }
     }
@@ -1523,7 +1524,7 @@ def handler(job):
             )
 
             # =================================================
-            # VALIDACIÓN DE RESOLUCIÓN
+            # VALIDACIÓN
             # =================================================
 
             if width % 32 != 0:
