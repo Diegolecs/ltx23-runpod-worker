@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Descarga mínima LTX-2.3 Q4 + Gemma GGUF ==="
+echo "=== DESCARGA MINIMA LTX-2.3 Q4 + GEMMA GGUF ==="
 
 COMFY="/runpod-volume"
 
@@ -21,7 +21,20 @@ pip install --no-cache-dir -q huggingface_hub
 
 
 # ============================================================
-# FUNCIÓN DE DESCARGA
+# LIMPIEZA DE DESCARGA ANIDADA ACCIDENTAL
+# ============================================================
+
+BAD_LTX_DIR="$COMFY/models/unet/LTX-2.3-distilled-1.1"
+
+if [ -d "$BAD_LTX_DIR" ]; then
+    echo "=== ELIMINANDO COPIA LTX ANIDADA ==="
+    rm -rf "$BAD_LTX_DIR"
+    echo "=== COPIA ANIDADA ELIMINADA ==="
+fi
+
+
+# ============================================================
+# FUNCION DE DESCARGA
 # ============================================================
 
 download() {
@@ -34,32 +47,52 @@ download() {
     TARGET="$DEST/$NAME"
 
     if [ -f "$TARGET" ]; then
-
         echo "Ya existe: $TARGET"
-
-        return
-
+        return 0
     fi
 
+    echo "=============================================="
     echo "Descargando: $NAME"
     echo "Repo: $REPO"
     echo "Archivo: $FILE"
+    echo "=============================================="
 
-    mkdir -p "$DEST"
+    TMP_DIR="/tmp/ltx-download"
+
+    rm -rf "$TMP_DIR"
+    mkdir -p "$TMP_DIR"
 
     hf download \
         "$REPO" \
         "$FILE" \
-        --local-dir "$DEST" \
+        --local-dir "$TMP_DIR" \
         --token "$HF_TOKEN"
+
+    FOUND_FILE="$(find "$TMP_DIR" -type f -name "$NAME" -print -quit)"
+
+    if [ -z "$FOUND_FILE" ]; then
+
+        echo "ERROR: Hugging Face descargó pero no encontramos:"
+        echo "$NAME"
+
+        echo "Contenido descargado:"
+        find "$TMP_DIR" -type f | sort
+
+        exit 1
+    fi
+
+    mkdir -p "$DEST"
+
+    cp "$FOUND_FILE" "$TARGET"
+
+    rm -rf "$TMP_DIR"
 
     if [ ! -f "$TARGET" ]; then
 
-        echo "ERROR: No apareció el archivo esperado:"
+        echo "ERROR: No se pudo crear:"
         echo "$TARGET"
 
         exit 1
-
     fi
 
     echo "OK: $TARGET"
@@ -67,10 +100,7 @@ download() {
 
 
 # ============================================================
-# LIMPIAR GEMMA SCALED FP8 ANTERIOR
-#
-# Este archivo NO es compatible con DualCLIPLoaderGGUF.
-# Lo eliminamos para liberar espacio.
+# LIMPIAR GEMMA SCALED FP8
 # ============================================================
 
 OLD_GEMMA="$COMFY/models/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors"
@@ -87,7 +117,7 @@ fi
 
 
 # ============================================================
-# MODELO PRINCIPAL — LTX-2.3 Q4
+# LTX-2.3 Q4
 # ============================================================
 
 download \
@@ -117,7 +147,7 @@ download \
 
 
 # ============================================================
-# TEXT PROJECTION LTX-2.3
+# LTX TEXT PROJECTION
 # ============================================================
 
 download \
@@ -127,10 +157,7 @@ download \
 
 
 # ============================================================
-# GEMMA 3 12B — GGUF Q2_K
-#
-# Compatible con DualCLIPLoaderGGUF.
-# Tamaño aproximado: 4.77 GB.
+# GEMMA 3 12B GGUF
 # ============================================================
 
 download \
@@ -140,23 +167,20 @@ download \
 
 
 # ============================================================
-# VERIFICACIÓN
+# VERIFICACION
 # ============================================================
 
 echo ""
-echo "=== MODELOS INSTALADOS ==="
+echo "=============================================="
+echo "MODELOS INSTALADOS"
+echo "=============================================="
 
-find "$COMFY/models" \
-    -type f \
-    | sort
+find "$COMFY/models" -type f | sort
 
 
 # ============================================================
-# COMPROBACIÓN ESPECÍFICA
+# ARCHIVOS OBLIGATORIOS
 # ============================================================
-
-echo ""
-echo "=== COMPROBACIÓN LTX ==="
 
 REQUIRED_FILES=(
 
@@ -172,6 +196,12 @@ REQUIRED_FILES=(
 )
 
 
+echo ""
+echo "=============================================="
+echo "VERIFICANDO ARCHIVOS"
+echo "=============================================="
+
+
 for FILE in "${REQUIRED_FILES[@]}"; do
 
     if [ ! -f "$FILE" ]; then
@@ -180,7 +210,6 @@ for FILE in "${REQUIRED_FILES[@]}"; do
         echo "$FILE"
 
         exit 1
-
     fi
 
     echo "OK: $FILE"
@@ -189,11 +218,12 @@ done
 
 
 # ============================================================
-# SEÑAL PARA EL HANDLER
+# SEÑAL
 # ============================================================
 
 touch /tmp/ltx_models_ready
 
 echo ""
-echo "=== SEÑAL: modelos listos ==="
-echo "=== LTX-2.3 READY ==="
+echo "=============================================="
+echo "LTX-2.3 READY"
+echo "=============================================="
