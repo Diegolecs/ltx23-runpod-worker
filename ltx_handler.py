@@ -27,6 +27,20 @@ COMFY_PROCESS = None
 
 
 # ============================================================
+# GITHUB CONFIG
+# ============================================================
+
+GITHUB_OWNER = "Diegolecs"
+GITHUB_REPO = "ltx23-runpod-worker"
+GITHUB_API_BASE = (
+    f"https://api.github.com/repos/"
+    f"{GITHUB_OWNER}/{GITHUB_REPO}"
+)
+
+GITHUB_API_VERSION = "2026-03-10"
+
+
+# ============================================================
 # LOGGING
 # ============================================================
 
@@ -35,7 +49,7 @@ def log(message):
 
 
 # ============================================================
-# HTTP HELPERS
+# HTTP HELPERS - COMFYUI
 # ============================================================
 
 def http_request(method, path, payload=None, timeout=30):
@@ -69,7 +83,160 @@ def get_json(path, timeout=30):
 
 
 def post_json(path, payload, timeout=30):
-    return http_request("POST", path, payload=payload, timeout=timeout)
+    return http_request(
+        "POST",
+        path,
+        payload=payload,
+        timeout=timeout,
+    )
+
+
+# ============================================================
+# HTTP HELPERS - GITHUB
+# ============================================================
+
+def github_request(
+    method,
+    path,
+    payload=None,
+    timeout=30,
+):
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        raise RuntimeError(
+            "GITHUB_TOKEN no está configurado "
+            "en las variables del worker."
+        )
+
+    url = (
+        f"{GITHUB_API_BASE}"
+        f"{path}"
+    )
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+        "User-Agent": "ltx23-runpod-worker",
+    }
+
+    data = None
+
+    if payload is not None:
+        data = json.dumps(
+            payload
+        ).encode("utf-8")
+
+        headers["Content-Type"] = (
+            "application/json"
+        )
+
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers=headers,
+        method=method,
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout,
+        ) as response:
+            raw = response.read()
+
+            status_code = response.status
+
+    except urllib.error.HTTPError as exc:
+        try:
+            raw_error = exc.read()
+            error_body = raw_error.decode(
+                "utf-8",
+                errors="replace",
+            )
+        except Exception:
+            error_body = ""
+
+        raise RuntimeError(
+            "GitHub API respondió con HTTP "
+            f"{exc.code}: {error_body}"
+        ) from exc
+
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"No se pudo conectar con GitHub: {exc}"
+        ) from exc
+
+    if not raw:
+        return {
+            "status_code": status_code,
+        }
+
+    try:
+        result = json.loads(
+            raw.decode("utf-8")
+        )
+    except json.JSONDecodeError:
+        result = {
+            "raw": raw.decode(
+                "utf-8",
+                errors="replace",
+            )
+        }
+
+    if isinstance(result, dict):
+        result["_status_code"] = status_code
+
+    return result
+
+
+def github_test():
+    log("==============================================")
+    log("GITHUB TEST")
+    log("==============================================")
+
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        return {
+            "ok": False,
+            "action": "github_test",
+            "message": (
+                "GITHUB_TOKEN no está configurado."
+            ),
+        }
+
+    log("=== GITHUB_TOKEN ENCONTRADO ===")
+    log("=== CONSULTANDO REPOSITORIO GITHUB ===")
+
+    repo_data = github_request(
+        "GET",
+        "",
+        timeout=30,
+    )
+
+    return {
+        "ok": True,
+        "action": "github_test",
+        "github": {
+            "authenticated": True,
+            "owner": GITHUB_OWNER,
+            "repo": GITHUB_REPO,
+            "full_name": repo_data.get(
+                "full_name"
+            ),
+            "private": repo_data.get(
+                "private"
+            ),
+            "default_branch": repo_data.get(
+                "default_branch"
+            ),
+            "html_url": repo_data.get(
+                "html_url"
+            ),
+        },
+    }
 
 
 # ============================================================
@@ -107,7 +274,11 @@ def start_comfyui():
         cwd="/comfyui",
     )
 
-    log(f"=== PROCESO COMFYUI INICIADO PID={COMFY_PROCESS.pid} ===")
+    log(
+        f"=== PROCESO COMFYUI INICIADO "
+        f"PID={COMFY_PROCESS.pid} ==="
+    )
+
     log("=== ESPERANDO COMFYUI ===")
 
     started = time.time()
@@ -115,17 +286,23 @@ def start_comfyui():
     while True:
         if COMFY_PROCESS.poll() is not None:
             raise RuntimeError(
-                f"ComfyUI terminó prematuramente con código "
+                f"ComfyUI terminó prematuramente "
+                f"con código "
                 f"{COMFY_PROCESS.returncode}"
             )
 
         try:
-            get_json("/system_stats", timeout=3)
+            get_json(
+                "/system_stats",
+                timeout=3,
+            )
             break
+
         except Exception:
             if time.time() - started > 180:
                 raise RuntimeError(
-                    "ComfyUI no respondió dentro de 180 segundos."
+                    "ComfyUI no respondió "
+                    "dentro de 180 segundos."
                 )
 
             time.sleep(1)
@@ -161,36 +338,53 @@ def get_storage_info():
 
     for key in SAFE_RUNPOD_ENV_KEYS:
         value = os.getenv(key)
+
         if value is not None:
             info[key] = value
 
-    volume_exists = NETWORK_VOLUME_DIR.exists()
-    volume_is_dir = NETWORK_VOLUME_DIR.is_dir()
+    volume_exists = (
+        NETWORK_VOLUME_DIR.exists()
+    )
+
+    volume_is_dir = (
+        NETWORK_VOLUME_DIR.is_dir()
+    )
 
     writable = False
     write_test = None
 
-    if volume_exists and volume_is_dir:
+    if (
+        volume_exists
+        and volume_is_dir
+    ):
         try:
             NETWORK_VOLUME_DIR.mkdir(
                 parents=True,
                 exist_ok=True,
             )
 
-            write_test = NETWORK_VOLUME_DIR / ".ltx_write_test"
+            write_test = (
+                NETWORK_VOLUME_DIR
+                / ".ltx_write_test"
+            )
 
             write_test.write_text(
                 "LTX storage test\n",
                 encoding="utf-8",
             )
 
-            write_test.unlink(missing_ok=True)
+            write_test.unlink(
+                missing_ok=True
+            )
+
             writable = True
 
         except Exception:
             try:
                 if write_test is not None:
-                    write_test.unlink(missing_ok=True)
+                    write_test.unlink(
+                        missing_ok=True
+                    )
             except Exception:
                 pass
 
@@ -213,7 +407,10 @@ def get_storage_info():
 
     contents = []
 
-    if volume_exists and volume_is_dir:
+    if (
+        volume_exists
+        and volume_is_dir
+    ):
         try:
             entries = sorted(
                 NETWORK_VOLUME_DIR.iterdir(),
@@ -239,9 +436,15 @@ def get_storage_info():
         "network_volume_path": str(
             NETWORK_VOLUME_DIR
         ),
-        "network_volume_exists": volume_exists,
-        "network_volume_is_directory": volume_is_dir,
-        "network_volume_writable": writable,
+        "network_volume_exists": (
+            volume_exists
+        ),
+        "network_volume_is_directory": (
+            volume_is_dir
+        ),
+        "network_volume_writable": (
+            writable
+        ),
         "disk": disk,
         "runpod_environment": info,
         "network_volume_contents": contents,
@@ -298,7 +501,9 @@ def list_nodes():
 
     for node_name in LTX_NODE_NAMES:
         if node_name in object_info:
-            result[node_name] = object_info[node_name]
+            result[node_name] = object_info[
+                node_name
+            ]
 
     return {
         "ok": True,
@@ -309,7 +514,10 @@ def list_nodes():
 
 
 def inspect_ltx():
-    log("=== CONSULTANDO INFORMACION LTX ===")
+    log(
+        "=== CONSULTANDO "
+        "INFORMACION LTX ==="
+    )
 
     object_info = get_object_info()
 
@@ -317,7 +525,9 @@ def inspect_ltx():
 
     for node_name in LTX_NODE_NAMES:
         if node_name in object_info:
-            result[node_name] = object_info[node_name]
+            result[node_name] = object_info[
+                node_name
+            ]
 
     return {
         "ok": True,
@@ -330,7 +540,9 @@ def inspect_ltx():
 # WORKFLOW VALIDATION
 # ============================================================
 
-def validate_workflow_nodes(workflow):
+def validate_workflow_nodes(
+    workflow
+):
     log("=== CONSULTANDO /object_info ===")
 
     object_info = get_object_info()
@@ -343,12 +555,16 @@ def validate_workflow_nodes(workflow):
     missing = []
 
     for node_id, node in workflow.items():
-        class_type = node.get("class_type")
+        class_type = node.get(
+            "class_type"
+        )
 
         if not class_type:
             missing.append({
                 "node_id": node_id,
-                "reason": "missing_class_type",
+                "reason": (
+                    "missing_class_type"
+                ),
             })
             continue
 
@@ -356,22 +572,33 @@ def validate_workflow_nodes(workflow):
             missing.append({
                 "node_id": node_id,
                 "class_type": class_type,
-                "reason": "node_not_found",
+                "reason": (
+                    "node_not_found"
+                ),
             })
 
     if missing:
-        log("=== NODOS FALTANTES ===")
-        log(json.dumps(
-            missing,
-            indent=2,
-            ensure_ascii=False,
-        ))
-
-        raise RuntimeError(
-            "El workflow contiene nodos que ComfyUI no reconoce."
+        log(
+            "=== NODOS FALTANTES ==="
         )
 
-    log("=== TODOS LOS NODOS DEL WORKFLOW EXISTEN ===")
+        log(
+            json.dumps(
+                missing,
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+
+        raise RuntimeError(
+            "El workflow contiene nodos "
+            "que ComfyUI no reconoce."
+        )
+
+    log(
+        "=== TODOS LOS NODOS DEL WORKFLOW "
+        "EXISTEN ==="
+    )
 
 
 # ============================================================
@@ -389,8 +616,8 @@ def build_ltx_workflow(
     cfg,
 ):
     negative_prompt = (
-        "blurry, low quality, distorted, deformed, "
-        "watermark, subtitles, text"
+        "blurry, low quality, distorted, "
+        "deformed, watermark, subtitles, text"
     )
 
     workflow = {
@@ -542,7 +769,9 @@ def build_ltx_workflow(
                 "video_latent": ["16", 0],
                 "audio_latent": ["16", 1],
                 "fps": float(fps),
-                "filename_prefix": "video/LTX23_test",
+                "filename_prefix": (
+                    "video/LTX23_test"
+                ),
                 "format": "mp4",
                 "codec": "h264",
                 "video_vae": ["2", 0],
@@ -563,7 +792,10 @@ def build_ltx_workflow(
 # WAIT FOR COMFY EXECUTION
 # ============================================================
 
-def wait_for_execution(prompt_id, timeout=1800):
+def wait_for_execution(
+    prompt_id,
+    timeout=1800,
+):
     log(
         f"=== ESPERANDO EJECUCION "
         f"{prompt_id} ==="
@@ -572,10 +804,13 @@ def wait_for_execution(prompt_id, timeout=1800):
     started = time.time()
 
     while True:
-        if time.time() - started > timeout:
+        if (
+            time.time() - started
+            > timeout
+        ):
             raise TimeoutError(
-                f"ComfyUI no termino dentro de "
-                f"{timeout} segundos."
+                f"ComfyUI no termino dentro "
+                f"de {timeout} segundos."
             )
 
         try:
@@ -583,10 +818,13 @@ def wait_for_execution(prompt_id, timeout=1800):
                 f"/history/{prompt_id}",
                 timeout=30,
             )
+
         except Exception as exc:
             log(
-                f"Advertencia consultando history: {exc}"
+                f"Advertencia consultando "
+                f"history: {exc}"
             )
+
             time.sleep(2)
             continue
 
@@ -596,9 +834,15 @@ def wait_for_execution(prompt_id, timeout=1800):
 
         entry = history[prompt_id]
 
-        status = entry.get("status", {})
+        status = entry.get(
+            "status",
+            {},
+        )
 
-        if isinstance(status, dict):
+        if isinstance(
+            status,
+            dict,
+        ):
             completed = status.get(
                 "completed",
                 False,
@@ -615,7 +859,12 @@ def wait_for_execution(prompt_id, timeout=1800):
                 f"COMPLETED={completed} ==="
             )
 
-            if status.get("status_str") == "error":
+            if (
+                status.get(
+                    "status_str"
+                )
+                == "error"
+            ):
                 raise RuntimeError(
                     json.dumps(
                         entry,
@@ -625,7 +874,11 @@ def wait_for_execution(prompt_id, timeout=1800):
                 )
 
             if completed:
-                log("=== EJECUCION COMPLETADA ===")
+                log(
+                    "=== EJECUCION "
+                    "COMPLETADA ==="
+                )
+
                 return entry
 
         time.sleep(2)
@@ -643,7 +896,9 @@ VIDEO_EXTENSIONS = {
 }
 
 
-def outputs_from_history(history_entry):
+def outputs_from_history(
+    history_entry
+):
     candidates = []
 
     outputs = history_entry.get(
@@ -651,11 +906,21 @@ def outputs_from_history(history_entry):
         {},
     )
 
-    if not isinstance(outputs, dict):
+    if not isinstance(
+        outputs,
+        dict,
+    ):
         return candidates
 
-    for node_id, node_output in outputs.items():
-        if not isinstance(node_output, dict):
+    for (
+        node_id,
+        node_output,
+    ) in outputs.items():
+
+        if not isinstance(
+            node_output,
+            dict,
+        ):
             continue
 
         for key in [
@@ -664,16 +929,29 @@ def outputs_from_history(history_entry):
             "images",
             "files",
         ]:
-            items = node_output.get(key, [])
+            items = node_output.get(
+                key,
+                [],
+            )
 
-            if not isinstance(items, list):
+            if not isinstance(
+                items,
+                list,
+            ):
                 continue
 
             for item in items:
-                if not isinstance(item, dict):
+
+                if not isinstance(
+                    item,
+                    dict,
+                ):
                     continue
 
-                filename = item.get("filename")
+                filename = item.get(
+                    "filename"
+                )
+
                 subfolder = item.get(
                     "subfolder",
                     "",
@@ -682,11 +960,16 @@ def outputs_from_history(history_entry):
                 if not filename:
                     continue
 
-                extension = Path(
-                    filename
-                ).suffix.lower()
+                extension = (
+                    Path(filename)
+                    .suffix
+                    .lower()
+                )
 
-                if extension not in VIDEO_EXTENSIONS:
+                if (
+                    extension
+                    not in VIDEO_EXTENSIONS
+                ):
                     continue
 
                 if subfolder:
@@ -695,6 +978,7 @@ def outputs_from_history(history_entry):
                         / subfolder
                         / filename
                     )
+
                 else:
                     path = (
                         COMFY_OUTPUT_DIR
@@ -734,16 +1018,23 @@ def find_generated_video(
     recent = []
 
     for path in COMFY_OUTPUT_DIR.rglob("*"):
+
         if not path.is_file():
             continue
 
-        if path.suffix.lower() not in VIDEO_EXTENSIONS:
+        if (
+            path.suffix.lower()
+            not in VIDEO_EXTENSIONS
+        ):
             continue
 
         try:
             mtime = path.stat().st_mtime
 
-            if mtime >= generation_started - 5:
+            if (
+                mtime
+                >= generation_started - 5
+            ):
                 recent.append(path)
 
         except OSError:
@@ -785,9 +1076,17 @@ def copy_video_to_network_volume(
         / source_path.name
     )
 
-    log("==============================================")
-    log("COPIANDO VIDEO AL NETWORK VOLUME")
-    log("==============================================")
+    log(
+        "=============================================="
+    )
+
+    log(
+        "COPIANDO VIDEO AL NETWORK VOLUME"
+    )
+
+    log(
+        "=============================================="
+    )
 
     log(
         f"ORIGEN: {source_path}"
@@ -804,11 +1103,14 @@ def copy_video_to_network_volume(
 
     if not target_path.is_file():
         raise RuntimeError(
-            "El video no apareció en el Network Volume "
+            "El video no apareció "
+            "en el Network Volume "
             "después de la copia."
         )
 
-    size_bytes = target_path.stat().st_size
+    size_bytes = (
+        target_path.stat().st_size
+    )
 
     log(
         f"=== VIDEO COPIADO: "
@@ -816,10 +1118,14 @@ def copy_video_to_network_volume(
     )
 
     return {
-        "filename": target_path.name,
-        "source_path": str(source_path),
-        "network_path": str(target_path),
-        "size_bytes": size_bytes,
+        "filename":
+            target_path.name,
+        "source_path":
+            str(source_path),
+        "network_path":
+            str(target_path),
+        "size_bytes":
+            size_bytes,
     }
 
 
@@ -827,7 +1133,9 @@ def copy_video_to_network_volume(
 # GENERATE
 # ============================================================
 
-def generate_video(job_input):
+def generate_video(
+    job_input
+):
     prompt = str(
         job_input.get(
             "prompt",
@@ -889,9 +1197,17 @@ def generate_video(job_input):
         )
     )
 
-    log("==============================================")
-    log("GENERATE LTX-2.3")
-    log("==============================================")
+    log(
+        "=============================================="
+    )
+
+    log(
+        "GENERATE LTX-2.3"
+    )
+
+    log(
+        "=============================================="
+    )
 
     log(f"prompt={prompt}")
     log(f"size={width}x{height}")
@@ -912,7 +1228,10 @@ def generate_video(job_input):
         cfg=cfg,
     )
 
-    log("=== WORKFLOW CONSTRUIDO ===")
+    log(
+        "=== WORKFLOW CONSTRUIDO ==="
+    )
+
     log(
         json.dumps(
             workflow,
@@ -925,7 +1244,10 @@ def generate_video(job_input):
         workflow
     )
 
-    log("=== ENVIANDO WORKFLOW A COMFYUI ===")
+    log(
+        "=== ENVIANDO WORKFLOW "
+        "A COMFYUI ==="
+    )
 
     generation_started = time.time()
 
@@ -940,7 +1262,10 @@ def generate_video(job_input):
         timeout=120,
     )
 
-    log("=== RESPUESTA /prompt ===")
+    log(
+        "=== RESPUESTA /prompt ==="
+    )
+
     log(
         json.dumps(
             response,
@@ -964,14 +1289,17 @@ def generate_video(job_input):
 
     if not prompt_id:
         raise RuntimeError(
-            "ComfyUI no devolvio prompt_id."
+            "ComfyUI no devolvio "
+            "prompt_id."
         )
 
     history_entry = wait_for_execution(
         prompt_id
     )
 
-    log("=== GENERACION TERMINADA ===")
+    log(
+        "=== GENERACION TERMINADA ==="
+    )
 
     video_path = find_generated_video(
         history_entry,
@@ -980,9 +1308,10 @@ def generate_video(job_input):
 
     if video_path is None:
         raise RuntimeError(
-            "La ejecucion de ComfyUI termino "
-            "pero no encontramos ningun video "
-            "en /comfyui/output."
+            "La ejecucion de ComfyUI "
+            "termino pero no encontramos "
+            "ningun video en "
+            "/comfyui/output."
         )
 
     log(
@@ -1000,11 +1329,17 @@ def generate_video(job_input):
         "videos": [
             {
                 "filename":
-                    network_output["filename"],
+                    network_output[
+                        "filename"
+                    ],
                 "path":
-                    network_output["network_path"],
+                    network_output[
+                        "network_path"
+                    ],
                 "size_bytes":
-                    network_output["size_bytes"],
+                    network_output[
+                        "size_bytes"
+                    ],
             }
         ],
         "images": [],
@@ -1038,7 +1373,9 @@ def test_handler():
     return {
         "ok": True,
         "action": "test",
-        "message": "LTX handler funcionando.",
+        "message": (
+            "LTX handler funcionando."
+        ),
     }
 
 
@@ -1052,7 +1389,10 @@ def handler(job):
         {},
     )
 
-    if not isinstance(job_input, dict):
+    if not isinstance(
+        job_input,
+        dict,
+    ):
         raise ValueError(
             "job.input debe ser un objeto."
         )
@@ -1062,9 +1402,17 @@ def handler(job):
         "test",
     )
 
-    log("==============================================")
-    log("JOB RECIBIDO")
-    log("==============================================")
+    log(
+        "=============================================="
+    )
+
+    log(
+        "JOB RECIBIDO"
+    )
+
+    log(
+        "=============================================="
+    )
 
     log(
         f"action={action}"
@@ -1078,12 +1426,20 @@ def handler(job):
         return test_handler()
 
     # --------------------------------------------------------
+    # GITHUB TEST
+    # --------------------------------------------------------
+
+    if action == "github_test":
+        return github_test()
+
+    # --------------------------------------------------------
     # STORAGE INFO
     # --------------------------------------------------------
 
     if action == "storage_info":
         log(
-            "=== CONSULTANDO STORAGE INFO ==="
+            "=== CONSULTANDO "
+            "STORAGE INFO ==="
         )
 
         result = get_storage_info()
@@ -1135,13 +1491,23 @@ def handler(job):
 # ============================================================
 
 if __name__ == "__main__":
-    log("LTX HANDLER PROPIO")
-    log("==============================================")
+    log(
+        "LTX HANDLER PROPIO"
+    )
+
+    log(
+        "=============================================="
+    )
 
     start_comfyui()
 
-    log("=== COMFYUI CONFIRMADO ===")
-    log("=== INICIANDO RUNPOD SERVERLESS ===")
+    log(
+        "=== COMFYUI CONFIRMADO ==="
+    )
+
+    log(
+        "=== INICIANDO RUNPOD SERVERLESS ==="
+    )
 
     import runpod
 
