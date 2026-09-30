@@ -5,7 +5,7 @@ COPY download_models.sh /download_models.sh
 COPY ltx_handler.py /ltx_handler.py
 
 RUN echo "=== VERIFICANDO HANDLER REAL ===" && \
-    grep -n "DEBUG TEST: ENTRE A handler(job)" /ltx_handler.py && \
+    grep -n "CALLBACK REAL OK" /ltx_handler.py && \
     echo "=== HANDLER REAL CONFIRMADO ==="
 
 RUN chmod +x /download_models.sh
