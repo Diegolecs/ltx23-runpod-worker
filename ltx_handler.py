@@ -40,7 +40,6 @@ GITHUB_API_BASE = (
 )
 
 GITHUB_API_VERSION = "2026-03-10"
-
 GITHUB_TRANSFER_TAG = "video-transfer"
 GITHUB_TRANSFER_RELEASE_NAME = "LTX Video Transfer"
 
@@ -135,7 +134,10 @@ def github_request(method, path, payload=None, timeout=30):
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout,
+        ) as response:
             raw = response.read()
             status_code = response.status
 
@@ -242,14 +244,11 @@ def github_get_or_create_transfer_release():
         )
 
     for release in releases:
-
         if release.get("tag_name") == GITHUB_TRANSFER_TAG:
-
             log(
                 f"=== RELEASE ENCONTRADO "
                 f"ID={release.get('id')} ==="
             )
-
             return release
 
     log("=== RELEASE NO EXISTE ===")
@@ -286,7 +285,6 @@ def github_get_or_create_transfer_release():
 # ============================================================
 
 def github_upload_file(file_path, asset_name=None):
-
     file_path = Path(file_path)
 
     if not file_path.is_file():
@@ -350,7 +348,6 @@ def github_upload_file(file_path, asset_name=None):
         file_path,
         "rb",
     ) as file:
-
         data = file.read()
 
     headers = {
@@ -369,17 +366,14 @@ def github_upload_file(file_path, asset_name=None):
     )
 
     try:
-
         with urllib.request.urlopen(
             request,
             timeout=300,
         ) as response:
-
             raw = response.read()
             status_code = response.status
 
     except urllib.error.HTTPError as exc:
-
         try:
             error_body = exc.read().decode(
                 "utf-8",
@@ -394,27 +388,22 @@ def github_upload_file(file_path, asset_name=None):
         ) from exc
 
     except urllib.error.URLError as exc:
-
         raise RuntimeError(
             "No se pudo conectar con GitHub "
             f"durante el upload: {exc}"
         ) from exc
 
     try:
-
         result = json.loads(
             raw.decode("utf-8")
         )
-
     except json.JSONDecodeError as exc:
-
         raise RuntimeError(
             "GitHub devolvió una respuesta "
             "que no es JSON."
         ) from exc
 
     if status_code != 201:
-
         raise RuntimeError(
             "GitHub esperaba HTTP 201 "
             f"pero devolvió {status_code}."
@@ -427,25 +416,21 @@ def github_upload_file(file_path, asset_name=None):
     )
 
     if not asset_id:
-
         raise RuntimeError(
             "GitHub upload terminó pero "
             "no devolvió asset_id."
         )
 
     if not browser_download_url:
-
         raise RuntimeError(
             "GitHub upload terminó pero "
             "no devolvió browser_download_url."
         )
 
     log("=== UPLOAD COMPLETADO ===")
-
     log(
         f"ASSET ID: {asset_id}"
     )
-
     log(
         "DOWNLOAD URL: "
         + browser_download_url
@@ -468,11 +453,10 @@ def github_upload_file(file_path, asset_name=None):
 
 
 # ============================================================
-# GITHUB DELETE ASSET
+# GITHUB DELETE
 # ============================================================
 
 def github_delete_asset(asset_id):
-
     asset_id = int(asset_id)
 
     log("==============================================")
@@ -502,7 +486,6 @@ def github_delete_asset(asset_id):
 # ============================================================
 
 def start_comfyui():
-
     global COMFY_PROCESS
 
     log("==============================================")
@@ -543,32 +526,24 @@ def start_comfyui():
     started = time.time()
 
     while True:
-
         if COMFY_PROCESS.poll() is not None:
-
             raise RuntimeError(
                 "ComfyUI terminó prematuramente "
                 f"con código {COMFY_PROCESS.returncode}"
             )
 
         try:
-
             get_json(
                 "/system_stats",
                 timeout=3,
             )
-
             break
-
         except Exception:
-
             if time.time() - started > 180:
-
                 raise RuntimeError(
                     "ComfyUI no respondió "
                     "dentro de 180 segundos."
                 )
-
             time.sleep(1)
 
     log(
@@ -593,11 +568,9 @@ SAFE_RUNPOD_ENV_KEYS = [
 
 
 def get_storage_info():
-
     info = {}
 
     for key in SAFE_RUNPOD_ENV_KEYS:
-
         value = os.getenv(key)
 
         if value is not None:
@@ -610,9 +583,7 @@ def get_storage_info():
     write_test = None
 
     if volume_exists and volume_is_dir:
-
         try:
-
             NETWORK_VOLUME_DIR.mkdir(
                 parents=True,
                 exist_ok=True,
@@ -635,23 +606,18 @@ def get_storage_info():
             writable = True
 
         except Exception:
-
             try:
-
                 if write_test is not None:
                     write_test.unlink(
                         missing_ok=True
                     )
-
             except Exception:
                 pass
 
     disk = None
 
     if volume_exists:
-
         try:
-
             usage = shutil.disk_usage(
                 NETWORK_VOLUME_DIR
             )
@@ -663,22 +629,18 @@ def get_storage_info():
             }
 
         except Exception:
-
             disk = None
 
     contents = []
 
     if volume_exists and volume_is_dir:
-
         try:
-
             entries = sorted(
                 NETWORK_VOLUME_DIR.iterdir(),
                 key=lambda p: p.name.lower(),
             )
 
             for entry in entries[:100]:
-
                 contents.append({
                     "name": entry.name,
                     "type": (
@@ -703,71 +665,6 @@ def get_storage_info():
         "disk": disk,
         "runpod_environment": info,
         "network_volume_contents": contents,
-    }
-
-
-# ============================================================
-# COPY VIDEO TO NETWORK VOLUME
-# ============================================================
-
-def copy_video_to_network_volume(source_path):
-
-    source_path = Path(source_path)
-
-    if not source_path.is_file():
-
-        raise FileNotFoundError(
-            f"No existe el video generado: "
-            f"{source_path}"
-        )
-
-    NETWORK_VIDEO_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    target_path = (
-        NETWORK_VIDEO_DIR
-        / source_path.name
-    )
-
-    log("==============================================")
-    log("COPIANDO VIDEO AL NETWORK VOLUME")
-    log("==============================================")
-
-    log(
-        f"ORIGEN: {source_path}"
-    )
-
-    log(
-        f"DESTINO: {target_path}"
-    )
-
-    shutil.copy2(
-        source_path,
-        target_path,
-    )
-
-    if not target_path.is_file():
-
-        raise RuntimeError(
-            "El video no apareció en "
-            "el Network Volume después "
-            "de la copia."
-        )
-
-    size_bytes = target_path.stat().st_size
-
-    log(
-        f"=== VIDEO COPIADO: "
-        f"{size_bytes:,} bytes ==="
-    )
-
-    return {
-        "filename": target_path.name,
-        "source_path": str(source_path),
-        "network_path": str(target_path),
-        "size_bytes": size_bytes,
     }
 
 
@@ -801,7 +698,6 @@ LTX_NODE_NAMES = [
 
 
 def list_nodes():
-
     object_info = get_json(
         "/object_info",
         timeout=60,
@@ -810,11 +706,9 @@ def list_nodes():
     found = {}
 
     for node_name in LTX_NODE_NAMES:
-
-        if node_name in object_info:
-            found[node_name] = True
-        else:
-            found[node_name] = False
+        found[node_name] = (
+            node_name in object_info
+        )
 
     return {
         "ok": True,
@@ -824,7 +718,6 @@ def list_nodes():
 
 
 def inspect_ltx():
-
     object_info = get_json(
         "/object_info",
         timeout=60,
@@ -833,9 +726,7 @@ def inspect_ltx():
     result = {}
 
     for node_name in LTX_NODE_NAMES:
-
         if node_name in object_info:
-
             result[node_name] = (
                 object_info[node_name]
             )
@@ -1054,12 +945,22 @@ def build_workflow(
             },
         },
 
+        # =====================================================
+        # CORREGIDO:
+        # DecodeAndSaveVideo ahora usa video_latent
+        # y audio_latent, no samples.
+        # =====================================================
+
         "17": {
             "class_type": "DecodeAndSaveVideo",
             "inputs": {
-                "samples": [
+                "video_latent": [
                     "16",
                     0,
+                ],
+                "audio_latent": [
+                    "16",
+                    1,
                 ],
                 "fps": fps,
                 "filename_prefix":
@@ -1083,7 +984,7 @@ def build_workflow(
 
 
 # ============================================================
-# WAIT FOR COMFY EXECUTION
+# WAIT FOR EXECUTION
 # ============================================================
 
 def wait_for_execution(
@@ -1101,21 +1002,18 @@ def wait_for_execution(
     while True:
 
         if time.time() - started > timeout:
-
             raise TimeoutError(
                 "La generación superó "
                 f"el timeout de {timeout} segundos."
             )
 
         try:
-
             history = get_json(
                 f"/history/{prompt_id}",
                 timeout=30,
             )
 
             if prompt_id not in history:
-
                 time.sleep(2)
                 continue
 
@@ -1136,7 +1034,6 @@ def wait_for_execution(
             )
 
             if status_str == "error":
-
                 messages = status.get(
                     "messages",
                     [],
@@ -1148,11 +1045,9 @@ def wait_for_execution(
                 )
 
             if completed or status_str == "success":
-
                 log(
                     "=== GENERACIÓN COMPLETADA ==="
                 )
-
                 return item
 
         except urllib.error.HTTPError:
@@ -1162,7 +1057,7 @@ def wait_for_execution(
 
 
 # ============================================================
-# EXTRACT OUTPUTS
+# OUTPUTS FROM HISTORY
 # ============================================================
 
 def outputs_from_history(history_item):
@@ -1218,7 +1113,6 @@ def outputs_from_history(history_item):
                 )
 
                 if filename:
-
                     outputs.append({
                         "filename": filename,
                         "subfolder": subfolder,
@@ -1267,7 +1161,6 @@ def find_generated_video(
         )
 
         if candidate.is_file():
-
             candidates.append(
                 candidate
             )
@@ -1311,6 +1204,71 @@ def find_generated_video(
 
 
 # ============================================================
+# COPY VIDEO TO NETWORK VOLUME
+# ============================================================
+
+def copy_video_to_network_volume(
+    source_path
+):
+
+    source_path = Path(source_path)
+
+    if not source_path.is_file():
+        raise FileNotFoundError(
+            f"No existe el video generado: "
+            f"{source_path}"
+        )
+
+    NETWORK_VIDEO_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    target_path = (
+        NETWORK_VIDEO_DIR
+        / source_path.name
+    )
+
+    log("==============================================")
+    log("COPIANDO VIDEO AL NETWORK VOLUME")
+    log("==============================================")
+
+    log(
+        f"ORIGEN: {source_path}"
+    )
+
+    log(
+        f"DESTINO: {target_path}"
+    )
+
+    shutil.copy2(
+        source_path,
+        target_path,
+    )
+
+    if not target_path.is_file():
+        raise RuntimeError(
+            "El video no apareció en "
+            "el Network Volume después "
+            "de la copia."
+        )
+
+    size_bytes = target_path.stat().st_size
+
+    log(
+        f"=== VIDEO COPIADO: "
+        f"{size_bytes:,} bytes ==="
+    )
+
+    return {
+        "filename": target_path.name,
+        "source_path": str(source_path),
+        "network_path": str(target_path),
+        "size_bytes": size_bytes,
+    }
+
+
+# ============================================================
 # GENERATE VIDEO
 # ============================================================
 
@@ -1318,7 +1276,12 @@ def generate_video(job_input):
 
     prompt = job_input.get(
         "prompt",
-        "A cinematic shot of a realistic orange sports car driving through a futuristic city at night, wet streets, reflections, dramatic lighting, smooth camera movement",
+        (
+            "A cinematic shot of a realistic orange "
+            "sports car driving through a futuristic "
+            "city at night, wet streets, reflections, "
+            "dramatic lighting, smooth camera movement"
+        ),
     )
 
     seed = int(
@@ -1413,6 +1376,10 @@ def generate_video(job_input):
         cfg=cfg,
     )
 
+    # ========================================================
+    # VALIDAR NODOS
+    # ========================================================
+
     log("=== VALIDANDO NODOS ===")
 
     object_info = get_json(
@@ -1432,7 +1399,6 @@ def generate_video(job_input):
     ]
 
     if missing_nodes:
-
         raise RuntimeError(
             "Faltan nodos de ComfyUI: "
             f"{missing_nodes}"
@@ -1440,13 +1406,20 @@ def generate_video(job_input):
 
     log("=== NODOS OK ===")
 
-    log("=== ENVIANDO WORKFLOW A COMFYUI ===")
+    # ========================================================
+    # ENVIAR WORKFLOW
+    # ========================================================
+
+    log(
+        "=== ENVIANDO WORKFLOW A COMFYUI ==="
+    )
 
     response = post_json(
         "/prompt",
         {
             "prompt": workflow,
-            "client_id": "ltx23-runpod-worker",
+            "client_id":
+                "ltx23-runpod-worker",
         },
         timeout=60,
     )
@@ -1456,7 +1429,6 @@ def generate_video(job_input):
     )
 
     if not prompt_id:
-
         raise RuntimeError(
             "ComfyUI no devolvió prompt_id: "
             f"{response}"
@@ -1465,6 +1437,10 @@ def generate_video(job_input):
     log(
         f"=== PROMPT ID: {prompt_id} ==="
     )
+
+    # ========================================================
+    # ESPERAR GENERACIÓN
+    # ========================================================
 
     history_item = wait_for_execution(
         prompt_id,
@@ -1480,9 +1456,9 @@ def generate_video(job_input):
         f"{video_path} ==="
     )
 
-    # --------------------------------------------------------
-    # COPY TO NETWORK VOLUME
-    # --------------------------------------------------------
+    # ========================================================
+    # NETWORK VOLUME
+    # ========================================================
 
     network_output = (
         copy_video_to_network_volume(
@@ -1490,13 +1466,10 @@ def generate_video(job_input):
         )
     )
 
-    # --------------------------------------------------------
-    # GITHUB UPLOAD
-    #
-    # IMPORTANTE:
-    # Esto ocurre dentro del MISMO JOB que generó el video.
-    # No dependemos de que otro worker encuentre el archivo.
-    # --------------------------------------------------------
+    # ========================================================
+    # GITHUB
+    # MISMO JOB
+    # ========================================================
 
     asset_name = (
         f"LTX23_{int(time.time())}_"
@@ -1508,9 +1481,9 @@ def generate_video(job_input):
         asset_name=asset_name,
     )
 
-    # --------------------------------------------------------
-    # RESULT
-    # --------------------------------------------------------
+    # ========================================================
+    # RESULTADO
+    # ========================================================
 
     result = {
         "ok": True,
@@ -1518,28 +1491,56 @@ def generate_video(job_input):
         "prompt_id": prompt_id,
 
         "videos": [
-            network_output["network_path"]
+            network_output[
+                "network_path"
+            ]
         ],
 
         "video": {
-            "filename": network_output["filename"],
-            "source_path": network_output["source_path"],
-            "network_path": network_output["network_path"],
-            "size_bytes": network_output["size_bytes"],
+            "filename":
+                network_output[
+                    "filename"
+                ],
+            "source_path":
+                network_output[
+                    "source_path"
+                ],
+            "network_path":
+                network_output[
+                    "network_path"
+                ],
+            "size_bytes":
+                network_output[
+                    "size_bytes"
+                ],
         },
 
         "transfer": {
             "provider": "github",
-            "asset_id": github_output["asset_id"],
-            "filename": github_output["filename"],
-            "size_bytes": github_output["size_bytes"],
-            "browser_download_url": (
+            "asset_id":
+                github_output[
+                    "asset_id"
+                ],
+            "filename":
+                github_output[
+                    "filename"
+                ],
+            "size_bytes":
+                github_output[
+                    "size_bytes"
+                ],
+            "browser_download_url":
                 github_output[
                     "browser_download_url"
-                ]
-            ),
-            "release_id": github_output["release_id"],
-            "release_tag": github_output["release_tag"],
+                ],
+            "release_id":
+                github_output[
+                    "release_id"
+                ],
+            "release_tag":
+                github_output[
+                    "release_tag"
+                ],
         },
     }
 
@@ -1554,7 +1555,9 @@ def generate_video(job_input):
 
     log(
         "NETWORK VOLUME: "
-        + network_output["network_path"]
+        + network_output[
+            "network_path"
+        ]
     )
 
     log(
@@ -1596,7 +1599,9 @@ def handler(job):
         return {
             "ok": True,
             "action": "test",
-            "message": "LTX handler funcionando.",
+            "message": (
+                "LTX handler funcionando."
+            ),
         }
 
     if action == "github_test":
@@ -1610,17 +1615,19 @@ def handler(job):
         )
 
         if not file_path:
-
             raise ValueError(
-                "github_upload_test requiere file_path."
+                "github_upload_test "
+                "requiere file_path."
             )
 
         return {
             "ok": True,
-            "action": "github_upload_test",
-            "upload": github_upload_file(
-                file_path
-            ),
+            "action":
+                "github_upload_test",
+            "upload":
+                github_upload_file(
+                    file_path
+                ),
         }
 
     if action == "github_delete_asset":
@@ -1630,9 +1637,9 @@ def handler(job):
         )
 
         if asset_id is None:
-
             raise ValueError(
-                "github_delete_asset requiere asset_id."
+                "github_delete_asset "
+                "requiere asset_id."
             )
 
         return github_delete_asset(
