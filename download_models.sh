@@ -7,8 +7,14 @@ COMFY="/runpod-volume"
 
 mkdir -p "$COMFY/models/unet"
 mkdir -p "$COMFY/models/text_encoders"
+mkdir -p "$COMFY/models/clip"
 mkdir -p "$COMFY/models/vae"
 mkdir -p "$COMFY/models/latent_upscale_models"
+
+
+# ============================================================
+# TOKEN
+# ============================================================
 
 if [ -z "$HF_TOKEN" ]; then
     echo "ERROR: HF_TOKEN no está definido."
@@ -17,20 +23,12 @@ fi
 
 export HF_TOKEN
 
+
+# ============================================================
+# HUGGINGFACE
+# ============================================================
+
 pip install --no-cache-dir -q huggingface_hub
-
-
-# ============================================================
-# LIMPIEZA DE DESCARGA ANIDADA ACCIDENTAL
-# ============================================================
-
-BAD_LTX_DIR="$COMFY/models/unet/LTX-2.3-distilled-1.1"
-
-if [ -d "$BAD_LTX_DIR" ]; then
-    echo "=== ELIMINANDO COPIA LTX ANIDADA ==="
-    rm -rf "$BAD_LTX_DIR"
-    echo "=== COPIA ANIDADA ELIMINADA ==="
-fi
 
 
 # ============================================================
@@ -47,7 +45,9 @@ download() {
     TARGET="$DEST/$NAME"
 
     if [ -f "$TARGET" ]; then
+
         echo "Ya existe: $TARGET"
+
         return 0
     fi
 
@@ -100,24 +100,60 @@ download() {
 
 
 # ============================================================
-# LIMPIAR GEMMA SCALED FP8
+# MIGRAR GEMMA EXISTENTE
 # ============================================================
 
-OLD_GEMMA="$COMFY/models/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors"
+OLD_GEMMA="$COMFY/models/text_encoders/gemma-3-12b-it-Q2_K.gguf"
+NEW_GEMMA="$COMFY/models/clip/gemma-3-12b-it-Q2_K.gguf"
 
-if [ -f "$OLD_GEMMA" ]; then
+if [ -f "$OLD_GEMMA" ] && [ ! -f "$NEW_GEMMA" ]; then
 
-    echo "=== ELIMINANDO GEMMA SCALED FP8 ANTERIOR ==="
+    echo "=== MOVIENDO GEMMA A models/clip ==="
 
-    rm -f "$OLD_GEMMA"
+    mv "$OLD_GEMMA" "$NEW_GEMMA"
 
-    echo "Eliminado: $OLD_GEMMA"
+    echo "OK: $NEW_GEMMA"
 
 fi
 
 
 # ============================================================
-# LTX-2.3 Q4
+# MIGRAR TEXT PROJECTION EXISTENTE
+# ============================================================
+
+OLD_PROJECTION="$COMFY/models/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
+NEW_PROJECTION="$COMFY/models/clip/ltx-2.3_text_projection_bf16.safetensors"
+
+if [ -f "$OLD_PROJECTION" ] && [ ! -f "$NEW_PROJECTION" ]; then
+
+    echo "=== MOVIENDO TEXT PROJECTION A models/clip ==="
+
+    mv "$OLD_PROJECTION" "$NEW_PROJECTION"
+
+    echo "OK: $NEW_PROJECTION"
+
+fi
+
+
+# ============================================================
+# LIMPIAR GEMMA SCALED ANTIGUO
+# ============================================================
+
+OLD_SCALED="$COMFY/models/text_encoders/gemma_3_12B_it_fp8_scaled.safetensors"
+
+if [ -f "$OLD_SCALED" ]; then
+
+    echo "=== ELIMINANDO GEMMA SCALED ANTIGUO ==="
+
+    rm -f "$OLD_SCALED"
+
+    echo "Eliminado: $OLD_SCALED"
+
+fi
+
+
+# ============================================================
+# LTX-2.3 Q4 GGUF
 # ============================================================
 
 download \
@@ -147,13 +183,13 @@ download \
 
 
 # ============================================================
-# LTX TEXT PROJECTION
+# TEXT PROJECTION
 # ============================================================
 
 download \
     "Kijai/LTX2.3_comfy" \
     "text_encoders/ltx-2.3_text_projection_bf16.safetensors" \
-    "$COMFY/models/text_encoders"
+    "$COMFY/models/clip"
 
 
 # ============================================================
@@ -163,11 +199,11 @@ download \
 download \
     "tensorblock/gemma-3-12b-it-GGUF" \
     "gemma-3-12b-it-Q2_K.gguf" \
-    "$COMFY/models/text_encoders"
+    "$COMFY/models/clip"
 
 
 # ============================================================
-# VERIFICACION
+# MOSTRAR MODELOS
 # ============================================================
 
 echo ""
@@ -179,16 +215,16 @@ find "$COMFY/models" -type f | sort
 
 
 # ============================================================
-# ARCHIVOS OBLIGATORIOS
+# VERIFICAR ARCHIVOS
 # ============================================================
 
 REQUIRED_FILES=(
 
     "$COMFY/models/unet/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
 
-    "$COMFY/models/text_encoders/gemma-3-12b-it-Q2_K.gguf"
+    "$COMFY/models/clip/gemma-3-12b-it-Q2_K.gguf"
 
-    "$COMFY/models/text_encoders/ltx-2.3_text_projection_bf16.safetensors"
+    "$COMFY/models/clip/ltx-2.3_text_projection_bf16.safetensors"
 
     "$COMFY/models/vae/LTX23_video_vae_bf16.safetensors"
 
@@ -215,6 +251,22 @@ for FILE in "${REQUIRED_FILES[@]}"; do
     echo "OK: $FILE"
 
 done
+
+
+# ============================================================
+# VERIFICACION ESPECIAL DEL DIRECTORIO CLIP
+# ============================================================
+
+echo ""
+echo "=============================================="
+echo "MODELOS CLIP DISPONIBLES"
+echo "=============================================="
+
+find "$COMFY/models/clip" \
+    -maxdepth 1 \
+    -type f \
+    -printf "%f\n" \
+    | sort
 
 
 # ============================================================
