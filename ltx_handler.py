@@ -938,6 +938,11 @@ def build_ltx_workflow(
 def handler(job):
 
     print(
+        "DEBUG TEST: ENTRE A handler(job)",
+        flush=True
+    )
+
+    print(
         "=== CALLBACK REAL OK ===",
         flush=True
     )
@@ -992,6 +997,27 @@ def handler(job):
 
             nodes = get_object_info()
 
+            target_nodes = [
+                "LTXVGemmaCLIPModelLoader",
+                "LTXVConditioning",
+                "DecodeAndSaveVideo",
+                "SamplerCustomAdvanced",
+                "LTXVScheduler",
+                "UnetLoaderGGUF",
+                "VAELoader",
+                "EmptyLTXVLatentVideo",
+                "LTXVEmptyLatentAudio",
+                "LTXVConcatAVLatent",
+                "LTXVSeparateAVLatent",
+                "VAEDecode"
+            ]
+
+            selected_info = {
+                name: nodes.get(name)
+                for name in target_nodes
+                if name in nodes
+            }
+
             relevant = []
 
             keywords = [
@@ -1024,8 +1050,26 @@ def handler(job):
                 "total_nodes": len(nodes),
                 "relevant_nodes": sorted(
                     relevant
-                )
+                ),
+                "target_nodes": sorted(
+                    selected_info.keys()
+                ),
+                "object_info": selected_info
             }
+
+            print(
+                "=== OBJECT_INFO OBJETIVO ===",
+                flush=True
+            )
+
+            print(
+                json.dumps(
+                    selected_info,
+                    ensure_ascii=False,
+                    indent=2
+                ),
+                flush=True
+            )
 
             return result
 
