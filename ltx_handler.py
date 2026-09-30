@@ -957,10 +957,6 @@ def build_workflow(
 
         # ----------------------------------------------------
         # 10 - CONCAT AUDIO + VIDEO
-        #
-        # CORREGIDO:
-        # video_latent <- node 8
-        # audio_latent <- node 9
         # ----------------------------------------------------
 
         "10": {
@@ -1098,10 +1094,6 @@ def build_workflow(
 
         # ----------------------------------------------------
         # 17 - DECODE + SAVE
-        #
-        # CORREGIDO:
-        # video_latent <- node 16 output 0
-        # audio_latent <- node 16 output 1
         # ----------------------------------------------------
 
         "17": {
@@ -1132,8 +1124,9 @@ def build_workflow(
                     "3",
                     0,
                 ],
-                "tiling":
-                    False,
+                "tiling": {
+                    "tiling": "disabled"
+                },
             },
         },
     }
@@ -1818,9 +1811,6 @@ def handler(job):
 
     # --------------------------------------------------------
     # GITHUB UPLOAD TEST
-    #
-    # Se mantiene para pruebas manuales.
-    # No usar para archivos de jobs anteriores.
     # --------------------------------------------------------
 
     if action == "github_upload_test":
