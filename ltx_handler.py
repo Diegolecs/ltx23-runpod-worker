@@ -23,12 +23,33 @@ comfy_log_file = None
 # =========================================================
 
 def http_get_json(url, timeout=10):
-    with urllib.request.urlopen(url, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+
+    with urllib.request.urlopen(
+        url,
+        timeout=timeout
+    ) as response:
+
+        body = response.read().decode(
+            "utf-8"
+        )
+
+        if not body:
+            return {}
+
+        return json.loads(body)
 
 
-def http_post_json(url, payload, timeout=30):
-    data = json.dumps(payload).encode("utf-8")
+def http_post_json(
+    url,
+    payload,
+    timeout=30
+):
+
+    data = json.dumps(
+        payload
+    ).encode(
+        "utf-8"
+    )
 
     request = urllib.request.Request(
         url,
@@ -40,12 +61,15 @@ def http_post_json(url, payload, timeout=30):
     )
 
     try:
+
         with urllib.request.urlopen(
             request,
             timeout=timeout
         ) as response:
 
-            body = response.read().decode("utf-8")
+            body = response.read().decode(
+                "utf-8"
+            )
 
             if not body:
                 return {}
@@ -60,6 +84,7 @@ def http_post_json(url, payload, timeout=30):
         )
 
         try:
+
             error_body = e.read().decode(
                 "utf-8",
                 errors="replace"
@@ -78,7 +103,8 @@ def http_post_json(url, payload, timeout=30):
         except Exception as read_error:
 
             print(
-                f"No se pudo leer el cuerpo del error: {read_error}",
+                "No se pudo leer el cuerpo del error: "
+                f"{read_error}",
                 flush=True
             )
 
@@ -104,14 +130,18 @@ def http_post_json(url, payload, timeout=30):
 # =========================================================
 
 def check_comfyui():
+
     try:
+
         http_get_json(
             f"{COMFY_URL}/system_stats",
             timeout=3
         )
+
         return True
 
     except Exception:
+
         return False
 
 
@@ -136,10 +166,12 @@ def get_object_info():
 
 
 # =========================================================
-# LOG DE COMFYUI
+# COMFYUI LOG
 # =========================================================
 
-def show_comfy_log_tail(lines=100):
+def show_comfy_log_tail(
+    lines=150
+):
 
     log_path = "/tmp/comfyui.log"
 
@@ -148,7 +180,9 @@ def show_comfy_log_tail(lines=100):
         flush=True
     )
 
-    if not os.path.exists(log_path):
+    if not os.path.exists(
+        log_path
+    ):
 
         print(
             "No existe /tmp/comfyui.log",
@@ -251,7 +285,8 @@ def start_comfyui():
         )
 
         print(
-            f"=== PROCESO COMFYUI INICIADO PID={comfy_process.pid} ===",
+            "=== PROCESO COMFYUI INICIADO "
+            f"PID={comfy_process.pid} ===",
             flush=True
         )
 
@@ -279,12 +314,16 @@ def start_comfyui():
     started_at = time.time()
     timeout_seconds = 180
 
-    while time.time() - started_at < timeout_seconds:
+    while (
+        time.time() - started_at
+        < timeout_seconds
+    ):
 
         if check_comfyui():
 
             print(
-                "=== COMFYUI LISTO EN 127.0.0.1:8188 ===",
+                "=== COMFYUI LISTO EN "
+                "127.0.0.1:8188 ===",
                 flush=True
             )
 
@@ -297,14 +336,16 @@ def start_comfyui():
             if exit_code is not None:
 
                 print(
-                    f"=== COMFYUI SE CERRO. EXIT CODE={exit_code} ===",
+                    "=== COMFYUI SE CERRO. "
+                    f"EXIT CODE={exit_code} ===",
                     flush=True
                 )
 
                 show_comfy_log_tail()
 
                 raise RuntimeError(
-                    f"ComfyUI terminó con exit code {exit_code}"
+                    "ComfyUI terminó con exit code "
+                    f"{exit_code}"
                 )
 
         time.sleep(2)
@@ -317,25 +358,89 @@ def start_comfyui():
     show_comfy_log_tail()
 
     raise RuntimeError(
-        "ComfyUI no estuvo disponible después de 180 segundos"
+        "ComfyUI no estuvo disponible "
+        "después de 180 segundos"
     )
 
 
 def ensure_comfyui():
 
     if check_comfyui():
+
         return
 
     start_comfyui()
 
 
 # =========================================================
+# WORKFLOW VALIDATION
+# =========================================================
+
+def validate_workflow_nodes(
+    workflow
+):
+
+    nodes = get_object_info()
+
+    missing = []
+
+    for node_id, node_data in workflow.items():
+
+        class_type = node_data.get(
+            "class_type"
+        )
+
+        if class_type not in nodes:
+
+            missing.append(
+                {
+                    "node_id": node_id,
+                    "class_type": class_type
+                }
+            )
+
+    if missing:
+
+        print(
+            "=== NODOS FALTANTES ===",
+            flush=True
+        )
+
+        print(
+            json.dumps(
+                missing,
+                ensure_ascii=False,
+                indent=2
+            ),
+            flush=True
+        )
+
+        raise RuntimeError(
+            "El workflow contiene nodos "
+            "que no existen en esta instalación: "
+            + json.dumps(
+                missing,
+                ensure_ascii=False
+            )
+        )
+
+    print(
+        "=== TODOS LOS NODOS DEL WORKFLOW EXISTEN ===",
+        flush=True
+    )
+
+
+# =========================================================
 # QUEUE
 # =========================================================
 
-def queue_prompt(workflow):
+def queue_prompt(
+    workflow
+):
 
-    client_id = str(uuid.uuid4())
+    client_id = str(
+        uuid.uuid4()
+    )
 
     payload = {
         "prompt": workflow,
@@ -354,7 +459,16 @@ def queue_prompt(workflow):
     )
 
     print(
-        f"=== RESPUESTA /prompt: {response} ===",
+        "=== RESPUESTA /prompt ===",
+        flush=True
+    )
+
+    print(
+        json.dumps(
+            response,
+            ensure_ascii=False,
+            indent=2
+        ),
         flush=True
     )
 
@@ -375,13 +489,19 @@ def queue_prompt(workflow):
     if not prompt_id:
 
         raise RuntimeError(
-            f"ComfyUI no devolvió prompt_id: {response}"
+            "ComfyUI no devolvió prompt_id: "
+            + json.dumps(
+                response,
+                ensure_ascii=False
+            )
         )
 
     return prompt_id
 
 
-def get_history(prompt_id):
+def get_history(
+    prompt_id
+):
 
     return http_get_json(
         f"{COMFY_URL}/history/{prompt_id}",
@@ -401,7 +521,10 @@ def wait_for_execution(
 
     started_at = time.time()
 
-    while time.time() - started_at < timeout_seconds:
+    while (
+        time.time() - started_at
+        < timeout_seconds
+    ):
 
         try:
 
@@ -409,71 +532,82 @@ def wait_for_execution(
                 prompt_id
             )
 
-            if prompt_id in history:
+            if prompt_id not in history:
 
-                item = history[prompt_id]
+                time.sleep(2)
 
-                status = item.get(
-                    "status",
-                    {}
-                )
+                continue
 
-                status_str = status.get(
-                    "status_str"
-                )
+            item = history[
+                prompt_id
+            ]
 
-                completed = status.get(
-                    "completed",
-                    False
-                )
+            status = item.get(
+                "status",
+                {}
+            )
 
-                messages = status.get(
-                    "messages",
-                    []
-                )
+            status_str = status.get(
+                "status_str"
+            )
+
+            completed = status.get(
+                "completed",
+                False
+            )
+
+            messages = status.get(
+                "messages",
+                []
+            )
+
+            print(
+                f"=== STATUS: {status_str} "
+                f"COMPLETED={completed} ===",
+                flush=True
+            )
+
+            if status_str == "success" and completed:
 
                 print(
-                    f"=== STATUS: {status_str} "
-                    f"COMPLETED={completed} ===",
+                    "=== EJECUCION COMPLETADA ===",
                     flush=True
                 )
 
-                if status_str == "success" and completed:
+                return item
 
-                    print(
-                        "=== EJECUCION COMPLETADA ===",
-                        flush=True
-                    )
+            if status_str == "error":
 
-                    return item
+                print(
+                    "=== COMFYUI DEVOLVIO ERROR ===",
+                    flush=True
+                )
 
-                if status_str == "error":
+                print(
+                    json.dumps(
+                        messages,
+                        ensure_ascii=False,
+                        indent=2
+                    ),
+                    flush=True
+                )
 
-                    print(
-                        "=== COMFYUI DEVOLVIO ERROR ===",
-                        flush=True
-                    )
+                show_comfy_log_tail()
 
-                    print(
-                        json.dumps(
-                            messages,
-                            ensure_ascii=False,
-                            indent=2
-                        ),
-                        flush=True
-                    )
-
-                    raise RuntimeError(
-                        "ComfyUI terminó la ejecución con ERROR"
-                    )
+                raise RuntimeError(
+                    "ComfyUI terminó la ejecución "
+                    "con ERROR"
+                )
 
         except urllib.error.HTTPError:
+
             pass
 
         time.sleep(2)
 
     raise TimeoutError(
-        "ComfyUI no terminó el workflow dentro del tiempo límite"
+        "ComfyUI no terminó el workflow "
+        "dentro del tiempo límite"
     )
 
 
@@ -481,7 +615,9 @@ def wait_for_execution(
 # OUTPUTS
 # =========================================================
 
-def extract_outputs(history_item):
+def extract_outputs(
+    history_item
+):
 
     outputs = history_item.get(
         "outputs",
@@ -501,6 +637,7 @@ def extract_outputs(history_item):
             node_output,
             dict
         ):
+
             continue
 
         for key in [
@@ -519,7 +656,9 @@ def extract_outputs(history_item):
                 list
             ):
 
-                result[key].extend(
+                result[
+                    key
+                ].extend(
                     items
                 )
 
@@ -537,13 +676,17 @@ def extract_outputs(history_item):
 
         if other:
 
-            result["other"][node_id] = other
+            result[
+                "other"
+            ][
+                node_id
+            ] = other
 
     return result
 
 
 # =========================================================
-# WORKFLOW LTX-2.3
+# LTX-2.3 WORKFLOW
 # =========================================================
 
 def build_ltx_workflow(
@@ -564,9 +707,9 @@ def build_ltx_workflow(
 
     workflow = {
 
-        # -------------------------------------------------
-        # MODEL
-        # -------------------------------------------------
+        # =================================================
+        # 1. LTX 2.3 Q4 GGUF
+        # =================================================
 
         "1": {
             "class_type": "UnetLoaderGGUF",
@@ -576,9 +719,9 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # VIDEO VAE
-        # -------------------------------------------------
+        # =================================================
+        # 2. VIDEO VAE
+        # =================================================
 
         "2": {
             "class_type": "VAELoader",
@@ -588,9 +731,9 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # AUDIO VAE
-        # -------------------------------------------------
+        # =================================================
+        # 3. AUDIO VAE
+        # =================================================
 
         "3": {
             "class_type": "VAELoader",
@@ -600,9 +743,15 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # GEMMA + TEXT PROJECTION
-        # -------------------------------------------------
+        # =================================================
+        # 4. GEMMA + LTX TEXT PROJECTION
+        #
+        # IMPORTANTE:
+        # usamos DualCLIPLoader normal,
+        # NO DualCLIPLoaderGGUF.
+        #
+        # El Gemma actual es FP8 scaled.
+        # =================================================
 
         "4": {
             "class_type": "DualCLIPLoader",
@@ -617,13 +766,13 @@ def build_ltx_workflow(
                     "ltxv",
 
                 "device":
-                    "default"
+                    "cpu"
             }
         },
 
-        # -------------------------------------------------
-        # POSITIVE PROMPT
-        # -------------------------------------------------
+        # =================================================
+        # 5. POSITIVE PROMPT
+        # =================================================
 
         "5": {
             "class_type": "CLIPTextEncode",
@@ -638,9 +787,9 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # NEGATIVE PROMPT
-        # -------------------------------------------------
+        # =================================================
+        # 6. NEGATIVE PROMPT
+        # =================================================
 
         "6": {
             "class_type": "CLIPTextEncode",
@@ -655,13 +804,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # LTX CONDITIONING
-        # -------------------------------------------------
+        # =================================================
+        # 7. LTX CONDITIONING
+        # =================================================
 
         "7": {
-            "class_type": "LTXVConditioning",
+            "class_type":
+                "LTXVConditioning",
+
             "inputs": {
+
                 "positive": [
                     "5",
                     0
@@ -677,13 +829,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # VIDEO LATENT
-        # -------------------------------------------------
+        # =================================================
+        # 8. EMPTY VIDEO LATENT
+        # =================================================
 
         "8": {
-            "class_type": "EmptyLTXVLatentVideo",
+            "class_type":
+                "EmptyLTXVLatentVideo",
+
             "inputs": {
+
                 "width":
                     width,
 
@@ -698,13 +853,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # AUDIO LATENT
-        # -------------------------------------------------
+        # =================================================
+        # 9. EMPTY AUDIO LATENT
+        # =================================================
 
         "9": {
-            "class_type": "LTXVEmptyLatentAudio",
+            "class_type":
+                "LTXVEmptyLatentAudio",
+
             "inputs": {
+
                 "audio_vae": [
                     "3",
                     0
@@ -721,13 +879,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # CONCAT VIDEO + AUDIO
-        # -------------------------------------------------
+        # =================================================
+        # 10. CONCAT VIDEO + AUDIO
+        # =================================================
 
         "10": {
-            "class_type": "LTXVConcatAVLatent",
+            "class_type":
+                "LTXVConcatAVLatent",
+
             "inputs": {
+
                 "video_latent": [
                     "8",
                     0
@@ -740,13 +901,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # SCHEDULER
-        # -------------------------------------------------
+        # =================================================
+        # 11. LTX SCHEDULER
+        # =================================================
 
         "11": {
-            "class_type": "LTXVScheduler",
+            "class_type":
+                "LTXVScheduler",
+
             "inputs": {
+
                 "steps":
                     steps,
 
@@ -769,37 +933,46 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # SAMPLER
-        # -------------------------------------------------
+        # =================================================
+        # 12. SAMPLER
+        # =================================================
 
         "12": {
-            "class_type": "KSamplerSelect",
+            "class_type":
+                "KSamplerSelect",
+
             "inputs": {
+
                 "sampler_name":
                     "euler"
             }
         },
 
-        # -------------------------------------------------
-        # NOISE
-        # -------------------------------------------------
+        # =================================================
+        # 13. RANDOM NOISE
+        # =================================================
 
         "13": {
-            "class_type": "RandomNoise",
+            "class_type":
+                "RandomNoise",
+
             "inputs": {
+
                 "noise_seed":
                     seed
             }
         },
 
-        # -------------------------------------------------
-        # GUIDER
-        # -------------------------------------------------
+        # =================================================
+        # 14. CFG GUIDER
+        # =================================================
 
         "14": {
-            "class_type": "CFGGuider",
+            "class_type":
+                "CFGGuider",
+
             "inputs": {
+
                 "model": [
                     "1",
                     0
@@ -820,13 +993,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # SAMPLER
-        # -------------------------------------------------
+        # =================================================
+        # 15. SAMPLER CUSTOM ADVANCED
+        # =================================================
 
         "15": {
-            "class_type": "SamplerCustomAdvanced",
+            "class_type":
+                "SamplerCustomAdvanced",
+
             "inputs": {
+
                 "noise": [
                     "13",
                     0
@@ -854,13 +1030,16 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # SEPARATE A/V
-        # -------------------------------------------------
+        # =================================================
+        # 16. SEPARATE VIDEO + AUDIO
+        # =================================================
 
         "16": {
-            "class_type": "LTXVSeparateAVLatent",
+            "class_type":
+                "LTXVSeparateAVLatent",
+
             "inputs": {
+
                 "av_latent": [
                     "15",
                     0
@@ -868,53 +1047,31 @@ def build_ltx_workflow(
             }
         },
 
-        # -------------------------------------------------
-        # VIDEO DECODE
-        # -------------------------------------------------
+        # =================================================
+        # 17. DECODE + SAVE MP4
+        #
+        # NO CreateVideo
+        # NO VHS
+        # =================================================
 
         "17": {
-            "class_type": "VAEDecode",
+            "class_type":
+                "DecodeAndSaveVideo",
+
             "inputs": {
-                "samples": [
+
+                "video_latent": [
                     "16",
                     0
                 ],
 
-                "vae": [
-                    "2",
-                    0
-                ]
-            }
-        },
-
-        # -------------------------------------------------
-        # CREATE VIDEO
-        # -------------------------------------------------
-
-        "18": {
-            "class_type": "CreateVideo",
-            "inputs": {
-                "images": [
-                    "17",
-                    0
+                "audio_latent": [
+                    "16",
+                    1
                 ],
 
                 "fps":
-                    fps
-            }
-        },
-
-        # -------------------------------------------------
-        # SAVE VIDEO
-        # -------------------------------------------------
-
-        "19": {
-            "class_type": "SaveVideo",
-            "inputs": {
-                "video": [
-                    "18",
-                    0
-                ],
+                    fps,
 
                 "filename_prefix":
                     "video/LTX23_test",
@@ -923,7 +1080,22 @@ def build_ltx_workflow(
                     "mp4",
 
                 "codec":
-                    "auto"
+                    "h264",
+
+                "video_vae": [
+                    "2",
+                    0
+                ],
+
+                "audio_vae": [
+                    "3",
+                    0
+                ],
+
+                "tiling": {
+                    "tiling":
+                        "disabled"
+                }
             }
         }
     }
@@ -998,18 +1170,46 @@ def handler(job):
             nodes = get_object_info()
 
             target_nodes = [
-                "LTXVGemmaCLIPModelLoader",
-                "LTXVConditioning",
-                "DecodeAndSaveVideo",
-                "SamplerCustomAdvanced",
-                "LTXVScheduler",
+
+                "DualCLIPLoader",
+
+                "DualCLIPLoaderGGUF",
+
+                "CLIPTextEncode",
+
+                "CFGGuider",
+
                 "UnetLoaderGGUF",
+
                 "VAELoader",
+
                 "EmptyLTXVLatentVideo",
+
                 "LTXVEmptyLatentAudio",
+
                 "LTXVConcatAVLatent",
+
+                "LTXVConditioning",
+
+                "LTXVScheduler",
+
+                "KSamplerSelect",
+
+                "RandomNoise",
+
+                "SamplerCustomAdvanced",
+
                 "LTXVSeparateAVLatent",
-                "VAEDecode"
+
+                "VAEDecode",
+
+                "DecodeAndSaveVideo",
+
+                "SaveVideo",
+
+                "CreateVideo",
+
+                "LTXVGemmaCLIPModelLoader"
             ]
 
             selected_info = {
@@ -1044,17 +1244,29 @@ def handler(job):
                     )
 
             result = {
-                "ok": True,
-                "action": "list_nodes",
-                "job_id": job_id,
-                "total_nodes": len(nodes),
-                "relevant_nodes": sorted(
-                    relevant
-                ),
-                "target_nodes": sorted(
-                    selected_info.keys()
-                ),
-                "object_info": selected_info
+
+                "ok":
+                    True,
+
+                "action":
+                    "list_nodes",
+
+                "job_id":
+                    job_id,
+
+                "total_nodes":
+                    len(nodes),
+
+                "relevant_nodes":
+                    sorted(relevant),
+
+                "target_nodes":
+                    sorted(
+                        selected_info.keys()
+                    ),
+
+                "object_info":
+                    selected_info
             }
 
             print(
@@ -1065,6 +1277,102 @@ def handler(job):
             print(
                 json.dumps(
                     selected_info,
+                    ensure_ascii=False,
+                    indent=2
+                ),
+                flush=True
+            )
+
+            return result
+
+        # =================================================
+        # INSPECT LTX
+        #
+        # Dejamos esta acción disponible para futuras
+        # comprobaciones sin tener que modificar el handler.
+        # =================================================
+
+        if action == "inspect_ltx":
+
+            ensure_comfyui()
+
+            nodes = get_object_info()
+
+            target_nodes = [
+
+                "DualCLIPLoader",
+
+                "DualCLIPLoaderGGUF",
+
+                "CLIPTextEncode",
+
+                "CFGGuider",
+
+                "UnetLoaderGGUF",
+
+                "LTXVGemmaCLIPModelLoader",
+
+                "LTXVConditioning",
+
+                "EmptyLTXVLatentVideo",
+
+                "LTXVEmptyLatentAudio",
+
+                "LTXVConcatAVLatent",
+
+                "LTXVScheduler",
+
+                "KSamplerSelect",
+
+                "RandomNoise",
+
+                "SamplerCustomAdvanced",
+
+                "LTXVSeparateAVLatent",
+
+                "VAELoader",
+
+                "VAEDecode",
+
+                "DecodeAndSaveVideo",
+
+                "SaveVideo",
+
+                "CreateVideo"
+            ]
+
+            selected_info = {
+                name: nodes.get(name)
+                for name in target_nodes
+                if name in nodes
+            }
+
+            result = {
+
+                "ok":
+                    True,
+
+                "action":
+                    "inspect_ltx",
+
+                "job_id":
+                    job_id,
+
+                "total_nodes":
+                    len(nodes),
+
+                "nodes":
+                    selected_info
+            }
+
+            print(
+                "=== INSPECCION LTX ===",
+                flush=True
+            )
+
+            print(
+                json.dumps(
+                    result,
                     ensure_ascii=False,
                     indent=2
                 ),
@@ -1185,6 +1493,39 @@ def handler(job):
                 flush=True
             )
 
+            # =================================================
+            # BASIC INPUT VALIDATION
+            # =================================================
+
+            if width % 32 != 0:
+
+                raise ValueError(
+                    f"width debe ser divisible entre 32. "
+                    f"Valor recibido: {width}"
+                )
+
+            if height % 32 != 0:
+
+                raise ValueError(
+                    f"height debe ser divisible entre 32. "
+                    f"Valor recibido: {height}"
+                )
+
+            if (
+                length < 1
+                or (length - 1) % 8 != 0
+            ):
+
+                raise ValueError(
+                    "length debe cumplir la regla "
+                    "LTX: 8*n + 1. "
+                    f"Valor recibido: {length}"
+                )
+
+            # =================================================
+            # BUILD
+            # =================================================
+
             workflow = build_ltx_workflow(
                 prompt_text=prompt_text,
                 seed=seed,
@@ -1210,25 +1551,60 @@ def handler(job):
                 flush=True
             )
 
+            # =================================================
+            # PRE-FLIGHT NODE CHECK
+            # =================================================
+
+            print(
+                "=== VALIDANDO NODOS DEL WORKFLOW ===",
+                flush=True
+            )
+
+            validate_workflow_nodes(
+                workflow
+            )
+
+            # =================================================
+            # QUEUE
+            # =================================================
+
             prompt_id = queue_prompt(
                 workflow
             )
+
+            # =================================================
+            # WAIT
+            # =================================================
 
             history_item = wait_for_execution(
                 prompt_id,
                 timeout_seconds=900
             )
 
+            # =================================================
+            # OUTPUTS
+            # =================================================
+
             outputs = extract_outputs(
                 history_item
             )
 
             result = {
-                "ok": True,
-                "action": "generate",
-                "job_id": job_id,
-                "prompt_id": prompt_id,
+
+                "ok":
+                    True,
+
+                "action":
+                    "generate",
+
+                "job_id":
+                    job_id,
+
+                "prompt_id":
+                    prompt_id,
+
                 "settings": {
+
                     "width":
                         width,
 
@@ -1250,6 +1626,7 @@ def handler(job):
                     "seed":
                         seed
                 },
+
                 "outputs":
                     outputs
             }
@@ -1275,14 +1652,24 @@ def handler(job):
         # =================================================
 
         result = {
-            "ok": False,
+
+            "ok":
+                False,
+
             "error":
                 f"Acción desconocida: {action}",
+
             "available_actions": [
+
                 "test",
+
                 "list_nodes",
+
+                "inspect_ltx",
+
                 "generate"
             ],
+
             "job_id":
                 job_id
         }
@@ -1293,6 +1680,10 @@ def handler(job):
         )
 
         return result
+
+    # =====================================================
+    # GLOBAL ERROR
+    # =====================================================
 
     except Exception as e:
 
@@ -1319,9 +1710,17 @@ def handler(job):
         traceback.print_exc()
 
         return {
-            "ok": False,
-            "error": str(e),
-            "job_id": job.get("id")
+
+            "ok":
+                False,
+
+            "error":
+                str(e),
+
+            "job_id":
+                job.get(
+                    "id"
+                )
         }
 
 
@@ -1358,9 +1757,12 @@ try:
         flush=True
     )
 
-    runpod.serverless.start({
-        "handler": handler
-    })
+    runpod.serverless.start(
+        {
+            "handler":
+                handler
+        }
+    )
 
 except Exception as e:
 
