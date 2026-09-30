@@ -1532,8 +1532,6 @@ def build_workflow(
                     0,
                 ],
 
-                # DynamicCombo V3:
-                # recibe la selección como string.
                 "tiling":
                     "disabled",
             },
@@ -1899,124 +1897,171 @@ def generate_video(
     job_input
 ):
 
-    prompt = job_input.get(
-        "prompt",
-        (
-            "A cinematic shot of a realistic "
-            "orange sports car driving through "
-            "a futuristic city at night, wet "
-            "streets, reflections, dramatic "
-            "lighting, smooth camera movement"
-        ),
+    # ========================================================
+    # WORKFLOW RECIBIDO DESDE COMFYUI
+    # ========================================================
+
+    workflow = job_input.get(
+        "workflow"
     )
 
-    seed = int(
-        job_input.get(
-            "seed",
-            123,
+    if workflow:
+
+        if not isinstance(
+            workflow,
+            dict,
+        ):
+
+            raise ValueError(
+                "El workflow recibido "
+                "no es un objeto JSON válido."
+            )
+
+        log(
+            "=============================================="
         )
-    )
 
-    width = int(
-        job_input.get(
-            "width",
-            768,
+        log(
+            "GENERATE VIDEO"
         )
-    )
 
-    height = int(
-        job_input.get(
-            "height",
-            512,
+        log(
+            "=============================================="
         )
-    )
 
-    length = int(
-        job_input.get(
-            "length",
-            49,
+        log(
+            "=== USANDO WORKFLOW RECIBIDO DESDE COMFYUI ==="
         )
-    )
 
-    fps = int(
-        job_input.get(
-            "fps",
-            25,
+        log(
+            f"=== NODOS RECIBIDOS: "
+            f"{len(workflow)} ==="
         )
-    )
 
-    steps = int(
-        job_input.get(
-            "steps",
-            8,
+    # ========================================================
+    # WORKFLOW LEGACY / FALLBACK
+    # ========================================================
+
+    else:
+
+        prompt = job_input.get(
+            "prompt",
+            (
+                "A cinematic shot of a realistic "
+                "orange sports car driving through "
+                "a futuristic city at night, wet "
+                "streets, reflections, dramatic "
+                "lighting, smooth camera movement"
+            ),
         )
-    )
 
-    cfg = float(
-        job_input.get(
-            "cfg",
-            1.0,
+        seed = int(
+            job_input.get(
+                "seed",
+                123,
+            )
         )
-    )
 
-    log(
-        "=============================================="
-    )
+        width = int(
+            job_input.get(
+                "width",
+                768,
+            )
+        )
 
-    log(
-        "GENERATE VIDEO"
-    )
+        height = int(
+            job_input.get(
+                "height",
+                512,
+            )
+        )
 
-    log(
-        "=============================================="
-    )
+        length = int(
+            job_input.get(
+                "length",
+                49,
+            )
+        )
 
-    log(
-        f"PROMPT: {prompt}"
-    )
+        fps = int(
+            job_input.get(
+                "fps",
+                25,
+            )
+        )
 
-    log(
-        f"SEED: {seed}"
-    )
+        steps = int(
+            job_input.get(
+                "steps",
+                8,
+            )
+        )
 
-    log(
-        f"SIZE: {width}x{height}"
-    )
+        cfg = float(
+            job_input.get(
+                "cfg",
+                1.0,
+            )
+        )
 
-    log(
-        f"LENGTH: {length}"
-    )
+        log(
+            "=============================================="
+        )
 
-    log(
-        f"FPS: {fps}"
-    )
+        log(
+            "GENERATE VIDEO"
+        )
 
-    log(
-        f"STEPS: {steps}"
-    )
+        log(
+            "=============================================="
+        )
 
-    log(
-        f"CFG: {cfg}"
-    )
+        log(
+            f"PROMPT: {prompt}"
+        )
 
-    workflow = build_workflow(
+        log(
+            f"SEED: {seed}"
+        )
 
-        prompt=prompt,
+        log(
+            f"SIZE: {width}x{height}"
+        )
 
-        seed=seed,
+        log(
+            f"LENGTH: {length}"
+        )
 
-        width=width,
+        log(
+            f"FPS: {fps}"
+        )
 
-        height=height,
+        log(
+            f"STEPS: {steps}"
+        )
 
-        length=length,
+        log(
+            f"CFG: {cfg}"
+        )
 
-        fps=fps,
+        workflow = build_workflow(
 
-        steps=steps,
+            prompt=prompt,
 
-        cfg=cfg,
-    )
+            seed=seed,
+
+            width=width,
+
+            height=height,
+
+            length=length,
+
+            fps=fps,
+
+            steps=steps,
+
+            cfg=cfg,
+        )
 
     # ========================================================
     # VALIDAR NODOS
