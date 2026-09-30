@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.error
 import urllib.request
 import uuid
 
@@ -38,9 +39,69 @@ def http_post_json(url, payload, timeout=30):
         method="POST",
     )
 
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout
+        ) as response:
 
+            body = response.read().decode("utf-8")
+
+            if not body:
+                return {}
+
+            return json.loads(body)
+
+    except urllib.error.HTTPError as e:
+
+        print(
+            f"=== COMFYUI HTTP ERROR {e.code} ===",
+            flush=True
+        )
+
+        try:
+            error_body = e.read().decode(
+                "utf-8",
+                errors="replace"
+            )
+
+            print(
+                "=== RESPUESTA REAL DE COMFYUI ===",
+                flush=True
+            )
+
+            print(
+                error_body,
+                flush=True
+            )
+
+        except Exception as read_error:
+
+            print(
+                f"No se pudo leer el cuerpo del error: {read_error}",
+                flush=True
+            )
+
+        raise
+
+    except Exception as e:
+
+        print(
+            "=== ERROR HTTP ===",
+            flush=True
+        )
+
+        print(
+            str(e),
+            flush=True
+        )
+
+        raise
+
+
+# =========================================================
+# COMFYUI
+# =========================================================
 
 def check_comfyui():
     try:
@@ -49,15 +110,36 @@ def check_comfyui():
             timeout=3
         )
         return True
+
     except Exception:
         return False
 
 
+def get_object_info():
+
+    print(
+        "=== CONSULTANDO /object_info ===",
+        flush=True
+    )
+
+    data = http_get_json(
+        f"{COMFY_URL}/object_info",
+        timeout=30
+    )
+
+    print(
+        f"=== COMFYUI DEVOLVIO {len(data)} NODOS ===",
+        flush=True
+    )
+
+    return data
+
+
 # =========================================================
-# COMFYUI
+# LOG DE COMFYUI
 # =========================================================
 
-def show_comfy_log_tail(lines=80):
+def show_comfy_log_tail(lines=100):
 
     log_path = "/tmp/comfyui.log"
 
@@ -67,10 +149,12 @@ def show_comfy_log_tail(lines=80):
     )
 
     if not os.path.exists(log_path):
+
         print(
             "No existe /tmp/comfyui.log",
             flush=True
         )
+
         return
 
     try:
@@ -81,6 +165,7 @@ def show_comfy_log_tail(lines=80):
             encoding="utf-8",
             errors="replace"
         ) as f:
+
             content = f.readlines()
 
         for line in content[-lines:]:
@@ -97,6 +182,10 @@ def show_comfy_log_tail(lines=80):
             flush=True
         )
 
+
+# =========================================================
+# ARRANQUE COMFYUI
+# =========================================================
 
 def start_comfyui():
 
@@ -129,40 +218,58 @@ def start_comfyui():
 
     log_path = "/tmp/comfyui.log"
 
-    comfy_log_file = open(
-        log_path,
-        "w",
-        encoding="utf-8"
-    )
+    try:
 
-    command = [
-        sys.executable,
-        "-u",
-        "/comfyui/main.py",
-        "--listen",
-        "127.0.0.1",
-        "--port",
-        "8188",
-        "--disable-auto-launch",
-        "--disable-metadata",
-    ]
+        comfy_log_file = open(
+            log_path,
+            "w",
+            encoding="utf-8"
+        )
 
-    print(
-        f"COMANDO COMFYUI: {' '.join(command)}",
-        flush=True
-    )
+        command = [
+            sys.executable,
+            "-u",
+            "/comfyui/main.py",
+            "--listen",
+            "127.0.0.1",
+            "--port",
+            "8188",
+            "--disable-auto-launch",
+            "--disable-metadata",
+        ]
 
-    comfy_process = subprocess.Popen(
-        command,
-        cwd="/comfyui",
-        stdout=comfy_log_file,
-        stderr=subprocess.STDOUT,
-    )
+        print(
+            f"COMANDO COMFYUI: {' '.join(command)}",
+            flush=True
+        )
 
-    print(
-        f"=== PROCESO COMFYUI INICIADO PID={comfy_process.pid} ===",
-        flush=True
-    )
+        comfy_process = subprocess.Popen(
+            command,
+            cwd="/comfyui",
+            stdout=comfy_log_file,
+            stderr=subprocess.STDOUT,
+        )
+
+        print(
+            f"=== PROCESO COMFYUI INICIADO PID={comfy_process.pid} ===",
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "=== ERROR INICIANDO COMFYUI ===",
+            flush=True
+        )
+
+        print(
+            str(e),
+            flush=True
+        )
+
+        traceback.print_exc()
+
+        raise
 
     print(
         "=== ESPERANDO COMFYUI ===",
@@ -183,20 +290,22 @@ def start_comfyui():
 
             return
 
-        if comfy_process.poll() is not None:
+        if comfy_process is not None:
 
             exit_code = comfy_process.poll()
 
-            print(
-                f"=== COMFYUI SE CERRO. EXIT CODE={exit_code} ===",
-                flush=True
-            )
+            if exit_code is not None:
 
-            show_comfy_log_tail()
+                print(
+                    f"=== COMFYUI SE CERRO. EXIT CODE={exit_code} ===",
+                    flush=True
+                )
 
-            raise RuntimeError(
-                f"ComfyUI terminó con exit code {exit_code}"
-            )
+                show_comfy_log_tail()
+
+                raise RuntimeError(
+                    f"ComfyUI terminó con exit code {exit_code}"
+                )
 
         time.sleep(2)
 
@@ -221,19 +330,7 @@ def ensure_comfyui():
 
 
 # =========================================================
-# OBJECT INFO
-# =========================================================
-
-def get_object_info():
-
-    return http_get_json(
-        f"{COMFY_URL}/object_info",
-        timeout=30
-    )
-
-
-# =========================================================
-# COMFYUI QUEUE
+# QUEUE
 # =========================================================
 
 def queue_prompt(workflow):
@@ -264,10 +361,16 @@ def queue_prompt(workflow):
     if "error" in response:
 
         raise RuntimeError(
-            f"ComfyUI rechazó el workflow: {response}"
+            "ComfyUI rechazó el workflow: "
+            + json.dumps(
+                response,
+                ensure_ascii=False
+            )
         )
 
-    prompt_id = response.get("prompt_id")
+    prompt_id = response.get(
+        "prompt_id"
+    )
 
     if not prompt_id:
 
@@ -286,7 +389,10 @@ def get_history(prompt_id):
     )
 
 
-def wait_for_execution(prompt_id, timeout_seconds=900):
+def wait_for_execution(
+    prompt_id,
+    timeout_seconds=900
+):
 
     print(
         f"=== ESPERANDO EJECUCION {prompt_id} ===",
@@ -299,7 +405,9 @@ def wait_for_execution(prompt_id, timeout_seconds=900):
 
         try:
 
-            history = get_history(prompt_id)
+            history = get_history(
+                prompt_id
+            )
 
             if prompt_id in history:
 
@@ -341,12 +449,22 @@ def wait_for_execution(prompt_id, timeout_seconds=900):
 
                 if status_str == "error":
 
-                    raise RuntimeError(
-                        "ComfyUI terminó la ejecución con ERROR: "
-                        + json.dumps(
+                    print(
+                        "=== COMFYUI DEVOLVIO ERROR ===",
+                        flush=True
+                    )
+
+                    print(
+                        json.dumps(
                             messages,
-                            ensure_ascii=False
-                        )
+                            ensure_ascii=False,
+                            indent=2
+                        ),
+                        flush=True
+                    )
+
+                    raise RuntimeError(
+                        "ComfyUI terminó la ejecución con ERROR"
                     )
 
         except urllib.error.HTTPError:
@@ -360,7 +478,7 @@ def wait_for_execution(prompt_id, timeout_seconds=900):
 
 
 # =========================================================
-# EXTRAER OUTPUTS
+# OUTPUTS
 # =========================================================
 
 def extract_outputs(history_item):
@@ -379,7 +497,10 @@ def extract_outputs(history_item):
 
     for node_id, node_output in outputs.items():
 
-        if not isinstance(node_output, dict):
+        if not isinstance(
+            node_output,
+            dict
+        ):
             continue
 
         for key in [
@@ -393,27 +514,14 @@ def extract_outputs(history_item):
                 []
             )
 
-            if isinstance(items, list):
+            if isinstance(
+                items,
+                list
+            ):
 
-                for item in items:
-
-                    if key == "videos":
-
-                        result["videos"].append(
-                            item
-                        )
-
-                    elif key == "gifs":
-
-                        result["gifs"].append(
-                            item
-                        )
-
-                    elif key == "images":
-
-                        result["images"].append(
-                            item
-                        )
+                result[key].extend(
+                    items
+                )
 
         known = {
             "videos",
@@ -456,9 +564,9 @@ def build_ltx_workflow(
 
     workflow = {
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # MODEL
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "1": {
             "class_type": "UnetLoaderGGUF",
@@ -468,9 +576,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # VIDEO VAE
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "2": {
             "class_type": "VAELoader",
@@ -480,9 +588,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # AUDIO VAE
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "3": {
             "class_type": "VAELoader",
@@ -492,9 +600,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # GEMMA + LTX TEXT PROJECTION
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # GEMMA + TEXT PROJECTION
+        # -------------------------------------------------
 
         "4": {
             "class_type": "DualCLIPLoader",
@@ -513,14 +621,16 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # POSITIVE PROMPT
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "5": {
             "class_type": "CLIPTextEncode",
             "inputs": {
-                "text": prompt_text,
+                "text":
+                    prompt_text,
+
                 "clip": [
                     "4",
                     0
@@ -528,14 +638,16 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # NEGATIVE PROMPT
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "6": {
             "class_type": "CLIPTextEncode",
             "inputs": {
-                "text": negative_prompt,
+                "text":
+                    negative_prompt,
+
                 "clip": [
                     "4",
                     0
@@ -543,9 +655,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # LTX CONDITIONING
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "7": {
             "class_type": "LTXVConditioning",
@@ -565,9 +677,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # EMPTY VIDEO LATENT
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # VIDEO LATENT
+        # -------------------------------------------------
 
         "8": {
             "class_type": "EmptyLTXVLatentVideo",
@@ -586,9 +698,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # EMPTY AUDIO LATENT
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # AUDIO LATENT
+        # -------------------------------------------------
 
         "9": {
             "class_type": "LTXVEmptyLatentAudio",
@@ -609,9 +721,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # CONCAT VIDEO + AUDIO
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "10": {
             "class_type": "LTXVConcatAVLatent",
@@ -628,9 +740,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # LTX SCHEDULER
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # SCHEDULER
+        # -------------------------------------------------
 
         "11": {
             "class_type": "LTXVScheduler",
@@ -657,9 +769,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # SAMPLER SELECT
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # SAMPLER
+        # -------------------------------------------------
 
         "12": {
             "class_type": "KSamplerSelect",
@@ -669,9 +781,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # RANDOM NOISE
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # NOISE
+        # -------------------------------------------------
 
         "13": {
             "class_type": "RandomNoise",
@@ -681,9 +793,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # CFG GUIDER
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # GUIDER
+        # -------------------------------------------------
 
         "14": {
             "class_type": "CFGGuider",
@@ -708,9 +820,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # SAMPLER
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "15": {
             "class_type": "SamplerCustomAdvanced",
@@ -742,9 +854,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # SEPARATE VIDEO + AUDIO
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # SEPARATE A/V
+        # -------------------------------------------------
 
         "16": {
             "class_type": "LTXVSeparateAVLatent",
@@ -756,9 +868,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # VIDEO VAE DECODE
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # VIDEO DECODE
+        # -------------------------------------------------
 
         "17": {
             "class_type": "VAEDecode",
@@ -775,9 +887,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # CREATE VIDEO
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         "18": {
             "class_type": "CreateVideo",
@@ -792,9 +904,9 @@ def build_ltx_workflow(
             }
         },
 
-        # ---------------------------------------------
-        # SAVE MP4
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # SAVE VIDEO
+        # -------------------------------------------------
 
         "19": {
             "class_type": "SaveVideo",
@@ -900,14 +1012,19 @@ def handler(job):
                     keyword.upper() in upper
                     for keyword in keywords
                 ):
-                    relevant.append(name)
+
+                    relevant.append(
+                        name
+                    )
 
             result = {
                 "ok": True,
                 "action": "list_nodes",
                 "job_id": job_id,
                 "total_nodes": len(nodes),
-                "relevant_nodes": sorted(relevant)
+                "relevant_nodes": sorted(
+                    relevant
+                )
             }
 
             return result
@@ -922,7 +1039,7 @@ def handler(job):
 
             prompt_text = job_input.get(
                 "prompt",
-                "A cinematic shot of a beautiful futuristic city at night, realistic lighting, smooth camera movement"
+                "A cinematic shot of a realistic orange sports car driving through a futuristic city at night, wet streets, reflections, dramatic lighting, smooth camera movement"
             )
 
             seed = int(
@@ -1035,6 +1152,20 @@ def handler(job):
                 cfg=cfg
             )
 
+            print(
+                "=== WORKFLOW CONSTRUIDO ===",
+                flush=True
+            )
+
+            print(
+                json.dumps(
+                    workflow,
+                    ensure_ascii=False,
+                    indent=2
+                ),
+                flush=True
+            )
+
             prompt_id = queue_prompt(
                 workflow
             )
@@ -1054,15 +1185,29 @@ def handler(job):
                 "job_id": job_id,
                 "prompt_id": prompt_id,
                 "settings": {
-                    "width": width,
-                    "height": height,
-                    "length": length,
-                    "fps": fps,
-                    "steps": steps,
-                    "cfg": cfg,
-                    "seed": seed
+                    "width":
+                        width,
+
+                    "height":
+                        height,
+
+                    "length":
+                        length,
+
+                    "fps":
+                        fps,
+
+                    "steps":
+                        steps,
+
+                    "cfg":
+                        cfg,
+
+                    "seed":
+                        seed
                 },
-                "outputs": outputs
+                "outputs":
+                    outputs
             }
 
             print(
@@ -1082,19 +1227,28 @@ def handler(job):
             return result
 
         # =================================================
-        # UNKNOWN
+        # UNKNOWN ACTION
         # =================================================
 
-        return {
+        result = {
             "ok": False,
-            "error": f"Acción desconocida: {action}",
+            "error":
+                f"Acción desconocida: {action}",
             "available_actions": [
                 "test",
                 "list_nodes",
                 "generate"
             ],
-            "job_id": job_id
+            "job_id":
+                job_id
         }
+
+        print(
+            f"RESPUESTA: {result}",
+            flush=True
+        )
+
+        return result
 
     except Exception as e:
 
@@ -1167,7 +1321,17 @@ try:
 except Exception as e:
 
     print(
-        "=== ERROR FATAL DURANTE EL ARRANQUE ===",
+        "==============================================",
+        flush=True
+    )
+
+    print(
+        "ERROR FATAL DURANTE EL ARRANQUE",
+        flush=True
+    )
+
+    print(
+        "==============================================",
         flush=True
     )
 
