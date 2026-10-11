@@ -1373,24 +1373,6 @@ def generate_video(job_input):
         workflow,
     )
 
-    # Force tiled VAE decoding to reduce peak memory use on long videos.
-    # DecodeAndSaveVideo's tiled mode processes spatial/temporal chunks
-    # instead of decoding the full video in one pass.
-    for node in workflow.values():
-        if node.get("class_type") == "DecodeAndSaveVideo":
-            node_inputs = node.setdefault("inputs", {})
-            node_inputs["tiling"] = {
-                "tiling": "enabled",
-                "tile_size": 256,
-                "overlap": 32,
-                "temporal_size": 64,
-                "temporal_overlap": 8,
-            }
-            log(
-                "=== VIDEO VAE TILING ACTIVADO "
-                "(tile=256, temporal=64) ==="
-            )
-
     # Validate nodes.
     log("=== VALIDANDO NODOS ===")
 
