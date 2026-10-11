@@ -1115,6 +1115,7 @@ def wait_for_execution(prompt_id, timeout=1800):
     )
 
     started = time.time()
+    consecutive_connection_errors = 0
 
     while True:
         if time.time() - started > timeout:
@@ -1127,6 +1128,7 @@ def wait_for_execution(prompt_id, timeout=1800):
                 f"/history/{prompt_id}",
                 timeout=30,
             )
+            consecutive_connection_errors = 0
 
             if prompt_id not in history:
                 time.sleep(2)
@@ -1149,6 +1151,18 @@ def wait_for_execution(prompt_id, timeout=1800):
 
         except urllib.error.HTTPError:
             pass
+        except urllib.error.URLError as exc:
+            consecutive_connection_errors += 1
+            log(
+                "ComfyUI no responde al consultar el historial "
+                f"({consecutive_connection_errors}/5): {exc}"
+            )
+            if consecutive_connection_errors >= 5:
+                raise RuntimeError(
+                    "ComfyUI dejó de responder cinco veces seguidas "
+                    "al consultar el historial. Posible caída por falta "
+                    "de memoria durante la decodificación del video."
+                ) from exc
 
         time.sleep(2)
 
@@ -1358,6 +1372,24 @@ def generate_video(job_input):
         job_input,
         workflow,
     )
+
+    # Force tiled VAE decoding to reduce peak memory use on long videos.
+    # DecodeAndSaveVideo's tiled mode processes spatial/temporal chunks
+    # instead of decoding the full video in one pass.
+    for node in workflow.values():
+        if node.get("class_type") == "DecodeAndSaveVideo":
+            node_inputs = node.setdefault("inputs", {})
+            node_inputs["tiling"] = {
+                "tiling": "enabled",
+                "tile_size": 256,
+                "overlap": 32,
+                "temporal_size": 64,
+                "temporal_overlap": 8,
+            }
+            log(
+                "=== VIDEO VAE TILING ACTIVADO "
+                "(tile=256, temporal=64) ==="
+            )
 
     # Validate nodes.
     log("=== VALIDANDO NODOS ===")
